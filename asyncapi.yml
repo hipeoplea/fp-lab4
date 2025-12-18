@@ -1,0 +1,239 @@
+asyncapi: 2.6.0
+info:
+  title: Quiz Game WebSocket API
+  version: "1.0.0"
+  description: |
+    Phoenix channel `game:{pin}` used for running live quiz sessions.
+    Clients connect to `/socket/websocket` with query params. Host users include their JWT token; players provide a nickname.
+servers:
+  production:
+    url: ws://localhost:4000/socket/websocket
+    protocol: ws
+    description: Local development WebSocket endpoint
+    security:
+      - bearerAuth: []
+    variables: {}
+defaultContentType: application/json
+channels:
+  "game:{pin}":
+    description: |
+      Channel for a specific game session identified by 6-digit `pin`.
+      On join, server assigns role based on JWT (host) or provided nickname (player).
+    parameters:
+      pin:
+        description: 6-digit join code
+        schema:
+          type: string
+    bindings:
+      ws:
+        query:
+          type: object
+          properties:
+            token:
+              type: string
+              description: Optional JWT used to authenticate as host
+            nickname:
+              type: string
+              description: Required for players (ignored for host)
+            player_token:
+              type: string
+              description: Optional player reconnection token
+    publish:
+      summary: Client -> Server messages
+      message:
+        oneOf:
+          - $ref: '#/components/messages/HostStart'
+          - $ref: '#/components/messages/NextQuestion'
+          - $ref: '#/components/messages/SubmitAnswer'
+    subscribe:
+      summary: Server -> Client messages
+      message:
+        oneOf:
+          - $ref: '#/components/messages/JoinAck'
+          - $ref: '#/components/messages/QuestionStarted'
+          - $ref: '#/components/messages/QuestionReveal'
+          - $ref: '#/components/messages/GameFinished'
+          - $ref: '#/components/messages/ErrorMessage'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: httpApiKey
+      in: query
+      name: token
+      description: JWT issued by `/api/auth/login` or `/api/auth/register`
+  messages:
+    HostStart:
+      name: host_start
+      title: Host Start
+      summary: Host starts the game from lobby state
+      payload:
+        $ref: '#/components/schemas/EmptyPayload'
+    NextQuestion:
+      name: next_question
+      title: Next Question
+      summary: Host moves to the next question or finishes the game
+      payload:
+        $ref: '#/components/schemas/EmptyPayload'
+    SubmitAnswer:
+      name: submit_answer
+      title: Submit Answer
+      summary: Player submits an answer for the current question
+      payload:
+        type: object
+        required: [question_id, choice_id]
+        properties:
+          question_id:
+            type: integer
+          choice_id:
+            type: integer
+    JoinAck:
+      name: join_ok
+      title: Join Acknowledgement
+      summary: Sent immediately after successful join
+      payload:
+        oneOf:
+          - title: Host join response
+            type: object
+            required: [pin, role]
+            properties:
+              pin:
+                type: string
+              role:
+                type: string
+                const: host
+          - title: Player join response
+            type: object
+            required: [pin, role, player_id, nickname]
+            properties:
+              pin:
+                type: string
+              role:
+                type: string
+                const: player
+              player_id:
+                type: integer
+              nickname:
+                type: string
+    QuestionStarted:
+      name: question_started
+      title: Question Started
+      summary: Broadcast when a question begins
+      payload:
+        type: object
+        required:
+          - phase
+          - question_id
+          - question_index
+          - total_questions
+          - prompt
+          - choices
+          - ends_at_ms
+        properties:
+          phase:
+            type: string
+            const: question
+          question_id:
+            type: integer
+          question_index:
+            type: integer
+          total_questions:
+            type: integer
+          prompt:
+            type: string
+          choices:
+            type: array
+            items:
+              type: object
+              required: [id, text, position]
+              properties:
+                id:
+                  type: integer
+                text:
+                  type: string
+                position:
+                  type: integer
+          ends_at_ms:
+            type: integer
+            description: Absolute epoch milliseconds when the question closes
+    QuestionReveal:
+      name: question_reveal
+      title: Question Reveal
+      summary: Broadcast when a question is closed and results are available
+      payload:
+        type: object
+        required:
+          - question_id
+          - correct_choice_ids
+          - answers
+          - leaderboard
+        properties:
+          question_id:
+            type: integer
+          correct_choice_ids:
+            type: array
+            items:
+              type: integer
+          answers:
+            type: array
+            items:
+              type: object
+              required:
+                - player_id
+                - nickname
+                - choice_id
+                - is_correct
+                - points_awarded
+                - latency_ms
+              properties:
+                player_id:
+                  type: integer
+                nickname:
+                  type: string
+                choice_id:
+                  type: integer
+                  nullable: true
+                is_correct:
+                  type: boolean
+                points_awarded:
+                  type: integer
+                latency_ms:
+                  type: integer
+                  nullable: true
+          leaderboard:
+            $ref: '#/components/schemas/Leaderboard'
+    GameFinished:
+      name: game_finished
+      title: Game Finished
+      summary: Broadcast when the last question is processed
+      payload:
+        type: object
+        required: [leaderboard]
+        properties:
+          leaderboard:
+            $ref: '#/components/schemas/Leaderboard'
+    ErrorMessage:
+      name: error
+      title: Error
+      summary: Error response for rejected commands
+      payload:
+        type: object
+        required: [reason]
+        properties:
+          reason:
+            type: string
+  schemas:
+    EmptyPayload:
+      type: object
+      description: Empty object payload
+    Leaderboard:
+      type: array
+      items:
+        type: object
+        required: [player_id, nickname, score]
+        properties:
+          player_id:
+            type: integer
+          nickname:
+            type: string
+          score:
+            type: integer
