@@ -1,4 +1,4 @@
-import type { AuthResponse, LoginPayload, RegisterPayload } from '../types';
+import type { AuthResponse, LoginPayload, RegisterPayload, Quiz, QuizCreateRequest, GameSession } from '../types';
 
 type RequestOptions = {
   method?: string;
@@ -20,7 +20,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     headers.Authorization = `Bearer ${options.token}`;
   }
 
-  const response = await fetch(`${options.apiBase ?? defaultApiBase}${path}`, {
+  const url = `${options.apiBase ?? defaultApiBase}${path}`;
+  // Debug log all outgoing requests with body
+  // eslint-disable-next-line no-console
+  console.log('[API REQUEST]', options.method || 'GET', url, options.body || null);
+
+  const response = await fetch(url, {
     method: options.method || 'GET',
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined
@@ -46,21 +51,25 @@ export function login(payload: LoginPayload, apiBase?: string) {
 }
 
 export function getQuizzes(token: string | null, apiBase?: string) {
-  return request('/quizzes', { method: 'GET', token, apiBase });
+  return request<Quiz[]>('/quizzes', { method: 'GET', token, apiBase });
 }
 
 export function getQuiz(id: string, token: string | null, apiBase?: string) {
-  return request(`/quizzes/${id}`, { method: 'GET', token, apiBase });
+  return request<Quiz>(`/quizzes/${id}`, { method: 'GET', token, apiBase });
 }
 
 export function createQuiz(payload: unknown, token: string | null, apiBase?: string) {
-  return request('/quizzes', { method: 'POST', body: payload, token, apiBase });
+  return request<Quiz>('/quizzes', { method: 'POST', body: payload, token, apiBase });
 }
 
 export function updateQuiz(id: string, payload: unknown, token: string | null, apiBase?: string) {
-  return request(`/quizzes/${id}`, { method: 'PUT', body: payload, token, apiBase });
+  return request<Quiz>(`/quizzes/${id}`, { method: 'PUT', body: payload, token, apiBase });
 }
 
 export function deleteQuiz(id: string, token: string | null, apiBase?: string) {
   return request(`/quizzes/${id}`, { method: 'DELETE', token, apiBase });
+}
+
+export function createGameSession(quizId: number, token: string | null, apiBase?: string) {
+  return request<GameSession>('/games', { method: 'POST', body: { quiz_id: quizId }, token, apiBase });
 }

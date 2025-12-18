@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AuthLayout from '../components/AuthLayout';
 import { login } from '../api/client';
 import { useSession } from '../state/session';
@@ -7,6 +8,8 @@ type Feedback = { type: 'success' | 'error'; text: string };
 
 export default function LoginPage() {
   const { session, setSession } = useSession();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -19,7 +22,7 @@ export default function LoginPage() {
     try {
       const res = await login({ email: form.email.trim(), password: form.password }, session.apiBase);
       setSession(res);
-      setMessage({ type: 'success', text: 'Login successful.' });
+      navigate('/library', { replace: true });
     } catch (error) {
       const text = error instanceof Error ? error.message : 'Login error';
       setMessage({ type: 'error', text });
@@ -92,6 +95,13 @@ export default function LoginPage() {
           disabled={loading}
         >
           <span className="truncate">{loading ? 'Sending...' : 'Log In'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => (window.location.href = '/game/join')}
+          className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-4 bg-white dark:bg-[#111318] border border-primary text-primary text-base font-bold leading-normal tracking-[0.015em] hover:bg-primary/10 transition-all"
+        >
+          Подключиться к игре
         </button>
         {message ? (
           <div
