@@ -28,5 +28,6 @@ defmodule QuizWeb.Router do
     pipe_through [:api, :auth]
 
     resources "/quizzes", QuizController, except: [:new, :edit]
+    post "/games", GameController, :create
   end
 end

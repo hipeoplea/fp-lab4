@@ -8,4 +8,10 @@ config :backend,
 
 config :phoenix, :json_library, Jason
 
+config :backend, QuizWeb.Endpoint,
+  pubsub_server: Quiz.PubSub,
+  secret_key_base:
+    System.get_env("SECRET_KEY_BASE") ||
+      "dev_secret_key_base_change_me_please"
+
 import_config "#{config_env()}.exs"

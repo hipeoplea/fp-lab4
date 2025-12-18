@@ -10,7 +10,7 @@ defmodule QuizWeb.Auth.Token do
       "iss" => @issuer,
       "sub" => to_string(user.id),
       "iat" => now,
-      "exp" => now + 60 * 60 * 24 * 7 # 7 days
+      "exp" => now + 60 * 60 * 24 * 7 
     }
 
     case Joken.generate_and_sign(%{}, claims, signer()) do

@@ -13,13 +13,21 @@ defmodule Quiz.Quizzes do
     QuizModel
     |> where([q], q.owner_id == ^owner_id)
     |> order_by([q], desc: q.updated_at)
+    |> preload(^quiz_children_preload())
     |> Repo.all()
   end
 
   def get_with_children!(id, owner_id) do
     QuizModel
     |> where([q], q.id == ^id and q.owner_id == ^owner_id)
-    |> preload(questions: ^from(qq in Question, order_by: qq.position, preload: [choices: ^from(c in Choice, order_by: c.position)]))
+    |> preload(^quiz_children_preload())
+    |> Repo.one!()
+  end
+
+  def get_full_quiz!(id) do
+    QuizModel
+    |> where([q], q.id == ^id)
+    |> preload(^quiz_children_preload())
     |> Repo.one!()
   end
 
@@ -39,5 +47,15 @@ defmodule Quiz.Quizzes do
 
   def delete(%QuizModel{} = quiz) do
     Repo.delete(quiz)
+  end
+
+  defp quiz_children_preload do
+    [
+      questions:
+        from(qq in Question,
+          order_by: qq.position,
+          preload: [choices: ^from(c in Choice, order_by: c.position)]
+        )
+    ]
   end
 end
