@@ -1,0 +1,5 @@
+defmodule Backend do
+  @moduledoc false
+
+  def hello, do: :world
+end
