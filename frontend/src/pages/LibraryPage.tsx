@@ -116,12 +116,6 @@ export default function LibraryPage() {
                   <div className="flex flex-col flex-1 justify-between gap-2">
                     <div className="flex justify-between items-start">
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-gray-500/10 px-2 py-0.5 text-xs font-bold text-gray-600 dark:text-gray-400 border border-gray-500/20">
-                            <span className="size-1.5 rounded-full bg-gray-500" />
-                            {quiz.is_public ? 'Published' : 'Draft'}
-                          </span>
-                        </div>
                         <h3 className="text-xl font-bold text-[#111318] dark:text-white group-hover:text-primary transition-colors cursor-pointer">
                           {quiz.title}
                         </h3>

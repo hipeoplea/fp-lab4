@@ -143,25 +143,49 @@ export default function GameHostPage() {
 
 function QuestionCard({ question }: { question: QuestionStartedPayload | null }) {
   if (!question) return null;
+  const type = question.type || 'mcq';
+  const sortedChoices = [...question.choices].sort((a, b) => a.position - b.position);
   return (
     <div className="rounded-2xl border border-[#282e39] bg-[#0f1115] p-6 shadow-2xl">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs uppercase tracking-wide text-[#9da6b9]">
           Question {question.question_index} / {question.total_questions}
         </span>
+        <span className="text-[11px] uppercase tracking-wide text-primary font-bold bg-primary/10 px-2 py-1 rounded-full">
+          {type === 'tf' ? 'True/False' : type === 'ordering' ? 'Ordering' : type === 'input' ? 'Input' : 'Multiple Choice'}
+        </span>
       </div>
       <h1 className="text-2xl font-bold mb-4">{question.prompt}</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {question.choices.map((choice) => (
-          <div
-            key={choice.id}
-            className="flex items-center gap-3 p-3 rounded-xl bg-[#1c1f27] border border-[#282e39] text-left text-lg font-semibold"
-          >
-            <div className="size-10 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-bold">{choice.position}</div>
-            <span>{choice.text}</span>
-          </div>
-        ))}
-      </div>
+      {type === 'ordering' ? (
+        <div className="flex flex-col gap-2">
+          {sortedChoices.map((choice, idx) => (
+            <div
+              key={choice.id}
+              className="flex items-center gap-3 p-3 rounded-xl bg-[#1c1f27] border border-[#282e39] text-left text-lg font-semibold"
+            >
+              <div className="size-10 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-bold">{idx + 1}</div>
+              <span>{choice.text}</span>
+            </div>
+          ))}
+        </div>
+      ) : type === 'input' ? (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-[#1c1f27] border border-[#282e39] text-left text-lg font-semibold">
+          <span className="material-symbols-outlined text-primary">keyboard</span>
+          <span>{sortedChoices[0]?.text || '—'}</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {sortedChoices.map((choice) => (
+            <div
+              key={choice.id}
+              className="flex items-center gap-3 p-3 rounded-xl bg-[#1c1f27] border border-[#282e39] text-left text-lg font-semibold"
+            >
+              <div className="size-10 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-bold">{choice.position}</div>
+              <span>{choice.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

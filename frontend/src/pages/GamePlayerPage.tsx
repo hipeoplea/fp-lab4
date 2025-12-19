@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useGameChannel } from '../hooks/useGameChannel';
+import type { QuestionStartedPayload } from '../types';
 
 export default function GamePlayerPage() {
   const { pin = '' } = useParams();
@@ -10,6 +11,8 @@ export default function GamePlayerPage() {
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
   const [remainingMs, setRemainingMs] = useState<number>(0);
   const [submittedChoiceId, setSubmittedChoiceId] = useState<number | null>(null);
+  const [inputValue, setInputValue] = useState('');
+  const [orderedChoices, setOrderedChoices] = useState<QuestionStartedPayload['choices']>([]);
 
   const question = useMemo(() => {
     if (state.phase === 'question') return state.data;
@@ -50,6 +53,12 @@ export default function GamePlayerPage() {
     if (state.phase === 'question') {
       setSelectedChoice(null);
       setSubmittedChoiceId(null);
+      setInputValue('');
+      const sorted = [...state.data.choices].sort((a, b) => a.position - b.position);
+      setOrderedChoices(sorted);
+      if (state.data.type === 'ordering' && sorted.length) {
+        setSelectedChoice(sorted[0].id);
+      }
     } else {
       setRemainingMs(0);
     }
@@ -174,28 +183,106 @@ export default function GamePlayerPage() {
 
           {/* Answers */}
           {!isLobby && !isLeaderboard && !isFinished ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pb-8">
-              {question?.choices.map((choice) => (
-                <button
-                  key={choice.id}
-                  className={`group relative flex items-center gap-4 p-3 md:p-5 rounded-2xl border-2 w-full text-left ${
-                    selectedChoice === choice.id
-                      ? 'bg-primary text-white border-primary'
-                      : 'bg-white dark:bg-[#1e2430] border-transparent hover:border-primary hover:bg-blue-50 dark:hover:bg-[#252b3b]'
-                  } shadow-sm hover:shadow-[0_0_20px_rgba(43,108,238,0.15)] ${
-                    submittedChoiceId === choice.id ? 'ring-2 ring-primary' : ''
-                  }`}
-                  onClick={() => setSelectedChoice(choice.id)}
-                  disabled={state.phase !== 'question'}
-                >
-                  <div className="size-12 md:size-14 rounded-xl bg-[#e5e7eb] dark:bg-[#282e39] flex items-center justify-center shadow-md group-hover:scale-110 group-active:scale-95 transition-transform shrink-0">
-                    <span className="material-symbols-outlined text-[#111318] dark:text-white text-3xl">check_circle</span>
-                  </div>
-                  <span className={`text-lg md:text-xl font-bold ${selectedChoice === choice.id ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
-                    {choice.text}
-                  </span>
-                </button>
-              ))}
+            <div className="mt-4 pb-8 w-full">
+              {question?.type === 'tf' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {question.choices.slice(0, 2).map((choice, idx) => (
+                    <button
+                      key={choice.id}
+                      className={`flex items-center justify-between px-4 py-4 rounded-2xl border-2 text-left ${
+                        selectedChoice === choice.id
+                          ? 'border-primary bg-primary text-white'
+                          : 'border-gray-200 dark:border-[#282e39] bg-white dark:bg-[#1e2430] text-gray-900 dark:text-white'
+                      } ${submittedChoiceId === choice.id ? 'ring-2 ring-primary' : ''}`}
+                      onClick={() => setSelectedChoice(choice.id)}
+                      disabled={state.phase !== 'question'}
+                    >
+                      <span className="text-lg font-semibold">{choice.text || (idx === 0 ? 'True' : 'False')}</span>
+                      <span className="material-symbols-outlined">{selectedChoice === choice.id ? 'check_circle' : 'radio_button_unchecked'}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : question?.type === 'ordering' ? (
+                <div className="flex flex-col gap-3">
+                  {orderedChoices.map((choice, idx) => (
+                    <div
+                      key={choice.id}
+                      className={`flex items-center gap-3 p-3 rounded-xl border-2 ${
+                        submittedChoiceId === choice.id ? 'border-primary' : 'border-gray-200 dark:border-[#282e39]'
+                      } bg-white dark:bg-[#1e2430]`}
+                    >
+                      <div className="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">{idx + 1}</div>
+                      <span className="flex-1 text-base font-semibold">{choice.text}</span>
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          className="size-8 rounded-full bg-gray-100 dark:bg-[#282e39] flex items-center justify-center text-[#6b7280] hover:text-primary disabled:opacity-40"
+                          disabled={idx === 0}
+                          onClick={() => {
+                            const next = [...orderedChoices];
+                            [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                            setOrderedChoices(next);
+                            setSelectedChoice(next[0]?.id ?? null);
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-base">expand_less</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="size-8 rounded-full bg-gray-100 dark:bg-[#282e39] flex items-center justify-center text-[#6b7280] hover:text-primary disabled:opacity-40"
+                          disabled={idx === orderedChoices.length - 1}
+                          onClick={() => {
+                            const next = [...orderedChoices];
+                            [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+                            setOrderedChoices(next);
+                            setSelectedChoice(next[0]?.id ?? null);
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-base">expand_more</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : question?.type === 'input' ? (
+                <div className="flex items-center gap-3 bg-white dark:bg-[#1e2430] border border-[#e5e7eb] dark:border-[#282e39] rounded-xl px-4 py-4">
+                  <span className="material-symbols-outlined text-primary">keyboard</span>
+                  <input
+                    className="flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white text-base font-medium placeholder:text-slate-300 dark:placeholder:text-[#3b4354]"
+                    placeholder="Enter your answer"
+                    value={inputValue}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setInputValue(val);
+                      setSelectedChoice(val.trim() ? question.choices[0]?.id ?? null : null);
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {question?.choices.map((choice) => (
+                    <button
+                      key={choice.id}
+                      className={`group relative flex items-center gap-4 p-3 md:p-5 rounded-2xl border-2 w-full text-left ${
+                        selectedChoice === choice.id
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-white dark:bg-[#1e2430] border-transparent hover:border-primary hover:bg-blue-50 dark:hover:bg-[#252b3b]'
+                      } shadow-sm hover:shadow-[0_0_20px_rgba(43,108,238,0.15)] ${
+                        submittedChoiceId === choice.id ? 'ring-2 ring-primary' : ''
+                      }`}
+                      onClick={() => setSelectedChoice(choice.id)}
+                      disabled={state.phase !== 'question'}
+                    >
+                      <div className="size-12 md:size-14 rounded-xl bg-[#e5e7eb] dark:bg-[#282e39] flex items-center justify-center shadow-md group-hover:scale-110 group-active:scale-95 transition-transform shrink-0">
+                        <span className="material-symbols-outlined text-[#111318] dark:text-white text-3xl">check_circle</span>
+                      </div>
+                      <span className={`text-lg md:text-xl font-bold ${selectedChoice === choice.id ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
+                        {choice.text}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
 

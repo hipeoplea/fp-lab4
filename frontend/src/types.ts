@@ -106,6 +106,7 @@ export interface ResumePayload {
 
 export interface QuestionStartedPayload {
   phase: 'question';
+  type?: 'mcq' | 'tf' | 'ordering' | 'input';
   question_id: number;
   question_index: number;
   total_questions: number;
