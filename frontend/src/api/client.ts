@@ -1,4 +1,5 @@
 import type { AuthResponse, LoginPayload, RegisterPayload, Quiz, QuizCreateRequest, GameSession } from '../types';
+import { sessionManager } from './sessionManager';
 
 type RequestOptions = {
   method?: string;
@@ -35,6 +36,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const data = text ? JSON.parse(text) : {};
 
   if (!response.ok) {
+    if (response.status === 401) {
+      sessionManager.clear();
+      window.location.href = '/login';
+      throw new Error('Unauthorized');
+    }
     const error = (data as Record<string, unknown>)?.error || (data as Record<string, unknown>)?.details || response.statusText;
     throw new Error(typeof error === 'string' ? error : JSON.stringify(error));
   }

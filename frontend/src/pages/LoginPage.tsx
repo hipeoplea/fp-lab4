@@ -96,13 +96,6 @@ export default function LoginPage() {
         >
           <span className="truncate">{loading ? 'Sending...' : 'Log In'}</span>
         </button>
-        <button
-          type="button"
-          onClick={() => (window.location.href = '/game/join')}
-          className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-4 bg-white dark:bg-[#111318] border border-primary text-primary text-base font-bold leading-normal tracking-[0.015em] hover:bg-primary/10 transition-all"
-        >
-          Подключиться к игре
-        </button>
         {message ? (
           <div
             className={`mt-2 rounded-lg border px-3 py-2 text-sm ${

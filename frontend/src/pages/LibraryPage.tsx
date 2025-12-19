@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createGameSession, deleteQuiz, getQuizzes } from '../api/client';
 import { useSession } from '../state/session';
 import type { Quiz } from '../types';
+import ProfileMenu from '../components/ProfileMenu';
 
 export default function LibraryPage() {
   const { session } = useSession();
@@ -76,9 +77,7 @@ export default function LibraryPage() {
             >
               <span className="truncate">Create Quiz</span>
             </Link>
-            <div className="bg-center bg-no-repeat bg-cover rounded-full size-10 border-2 border-[#282e39] cursor-pointer">
-              <span className="sr-only">Profile</span>
-            </div>
+            <ProfileMenu />
           </div>
         </header>
 

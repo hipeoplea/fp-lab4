@@ -16,7 +16,7 @@ export default function AuthLayout({
   actionText,
   actionHref,
   actionLabel,
-  footerNote = '(c) 2024 QuizMaster Inc. All rights reserved.',
+  footerNote,
   children
 }: AuthLayoutProps) {
   return (
@@ -38,14 +38,24 @@ export default function AuthLayout({
           </div>
           <h2 className="text-xl font-black leading-tight tracking-[-0.015em]">QuizMaster</h2>
         </div>
-        <div className="flex gap-4 items-center">
-          <span className="hidden md:block text-sm font-medium text-slate-600 dark:text-[#9da6b9]">{actionText}</span>
-          <Link
-            to={actionHref}
-            className="header-cta flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-6 bg-slate-100 dark:bg-[#1c1f27] hover:bg-slate-200 dark:hover:bg-[#282e39] text-slate-900 dark:text-white text-sm font-bold leading-normal transition-colors"
+        <div className="flex gap-3 items-center">
+          <button
+            type="button"
+            onClick={() => (window.location.href = '/game/join')}
+            className="hidden sm:flex h-10 cursor-pointer items-center justify-center overflow-hidden rounded-full px-4 bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 text-sm font-bold leading-normal transition-colors"
           >
-            <span className="truncate">{actionLabel}</span>
-          </Link>
+            <span className="material-symbols-outlined text-base mr-1">smart_display</span>
+            Подключиться к игре
+          </button>
+          <div className="flex gap-4 items-center">
+            <span className="hidden md:block text-sm font-medium text-slate-600 dark:text-[#9da6b9]">{actionText}</span>
+            <Link
+              to={actionHref}
+              className="header-cta flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-6 bg-slate-100 dark:bg-[#1c1f27] hover:bg-slate-200 dark:hover:bg-[#282e39] text-slate-900 dark:text-white text-sm font-bold leading-normal transition-colors"
+            >
+              <span className="truncate">{actionLabel}</span>
+            </Link>
+          </div>
         </div>
       </header>
       <main className="flex-1 flex items-center justify-center p-4 sm:p-8 relative z-10">
@@ -59,7 +69,7 @@ export default function AuthLayout({
             </div>
             {children}
           </div>
-          <p className="text-center text-slate-500 dark:text-[#9da6b9] text-sm mt-8 pb-4">{footerNote}</p>
+          {footerNote ? <p className="text-center text-slate-500 dark:text-[#9da6b9] text-sm mt-8 pb-4">{footerNote}</p> : null}
         </div>
       </main>
     </div>

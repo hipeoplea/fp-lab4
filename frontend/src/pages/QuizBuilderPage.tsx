@@ -108,18 +108,21 @@ export default function QuizBuilderPage({ mode }: { mode: Mode }) {
     );
   };
 
-  const setCorrect = (qIdx: number, cIdx: number) => {
-    setQuestions((prev) =>
-      prev.map((q, i) =>
-        i === qIdx
-          ? {
+const setCorrect = (qIdx: number, cIdx: number) => {
+  setQuestions((prev) =>
+    prev.map((q, i) =>
+      i === qIdx
+        ? {
               ...q,
-              choices: q.choices.map((c, j) => ({ ...c, is_correct: j === cIdx }))
+              choices:
+                q.type === 'ordering'
+                  ? q.choices
+                  : q.choices.map((c, j) => ({ ...c, is_correct: j === cIdx }))
             }
           : q
       )
     );
-  };
+};
 
   const mapTypeToApi = (kind: QuestionKind): 'mcq' | 'tf' => {
     if (kind === 'true_false') return 'tf';
@@ -211,17 +214,16 @@ export default function QuizBuilderPage({ mode }: { mode: Mode }) {
             <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">
               {mode === 'create' ? 'Create New Quiz' : 'Edit Quiz'}
             </h2>
-            <p className="text-slate-500 dark:text-[#9da6b9] text-xs font-normal">Saved to Drafts</p>
           </div>
         </div>
         <div className="flex gap-3">
           <button
             type="button"
             className="flex items-center justify-center overflow-hidden rounded-full h-10 px-4 bg-gray-100 dark:bg-[#282e39] hover:bg-gray-200 dark:hover:bg-[#3b4354] text-slate-900 dark:text-white text-sm font-bold leading-normal transition-colors"
-            onClick={() => setToast('Preview is not implemented yet')}
+            onClick={() => navigate('/library')}
           >
-            <span className="material-symbols-outlined mr-2 text-[20px]">visibility</span>
-            <span className="truncate">Preview</span>
+            <span className="material-symbols-outlined mr-2 text-[20px]">home</span>
+            <span className="truncate">Home</span>
           </button>
           <button
             className="flex items-center justify-center overflow-hidden rounded-full h-10 px-6 bg-primary hover:bg-blue-600 text-white text-sm font-bold leading-normal transition-colors shadow-lg shadow-blue-900/20"
@@ -333,43 +335,139 @@ export default function QuizBuilderPage({ mode }: { mode: Mode }) {
               </div>
 
               {/* Answers */}
-              <div className="grid grid-cols-2 gap-4 w-full">
-              {DEFAULT_CHOICES.map((choice, idx) => {
-                const colors = ['#e21b3c', '#1368ce', '#d89e00', '#26890c'];
-                const icons = ['change_history', 'diamond', 'circle', 'square'];
-                const current = activeQuestion?.choices[idx] || choice;
-                return (
-                  <div
-                    key={idx}
-                    className="group relative flex items-center bg-white dark:bg-[#1c1f27] rounded-xl overflow-hidden border border-transparent focus-within:border-primary shadow-sm transition-all h-20"
-                  >
-                    <div
-                      className="h-full w-14 flex items-center justify-center text-white shrink-0"
-                      style={{ backgroundColor: colors[idx % colors.length] }}
-                    >
-                      <span className="material-symbols-outlined text-[28px] drop-shadow-md">{icons[idx % icons.length]}</span>
-                    </div>
-                    <input
-                      className="flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white px-4 text-lg font-medium placeholder:text-slate-300 dark:placeholder:text-[#3b4354]"
-                      placeholder={`Add answer ${idx + 1}`}
-                      value={current.text}
-                      onChange={(e) => activeQuestion && updateChoice(activeIndex, idx, { text: e.target.value })}
-                    />
-                    <div className="pr-4">
-                      <label className="cursor-pointer size-8 rounded-full border-2 border-gray-200 dark:border-[#3b4354] hover:border-primary flex items-center justify-center transition-all">
-                        <input
-                          className="hidden"
-                          type="radio"
-                          checked={!!current.is_correct}
-                          onChange={() => activeQuestion && setCorrect(activeIndex, idx)}
-                        />
-                        <span className="material-symbols-outlined text-[20px] text-primary">{current.is_correct ? 'check' : ''}</span>
-                      </label>
-                    </div>
+              <div className="w-full">
+                {activeQuestion?.type === 'true_false' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {['True', 'False'].map((label, idx) => {
+                      const current = activeQuestion.choices[idx] || { text: label, is_correct: idx === 0, position: idx + 1 };
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          className={`flex items-center justify-between px-4 py-4 rounded-xl border-2 text-left ${
+                            current.is_correct
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-gray-200 dark:border-[#282e39] bg-white dark:bg-[#1c1f27]'
+                          }`}
+                          onClick={() => {
+                            updateChoice(activeIndex, idx, { text: label });
+                            setCorrect(activeIndex, idx);
+                          }}
+                        >
+                          <span className="text-lg font-semibold">{label}</span>
+                          <span className="material-symbols-outlined">{current.is_correct ? 'check_circle' : 'radio_button_unchecked'}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                ) : activeQuestion?.type === 'ordering' ? (
+                  <div className="flex flex-col gap-3">
+                    {activeQuestion.choices.map((choice, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-3 bg-white dark:bg-[#1c1f27] border border-gray-200 dark:border-[#282e39] rounded-xl px-4 py-3"
+                      >
+                        <div className="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">{idx + 1}</div>
+                        <input
+                          className="flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white text-base font-medium placeholder:text-slate-300 dark:placeholder:text-[#3b4354]"
+                          placeholder={`Answer ${idx + 1}`}
+                          value={choice.text}
+                          onChange={(e) => updateChoice(activeIndex, idx, { text: e.target.value })}
+                        />
+                        {activeQuestion.choices.length > 2 ? (
+                          <button
+                            type="button"
+                            className="text-[#9da6b9] hover:text-red-500"
+                            onClick={() =>
+                              setQuestions((prev) =>
+                                prev.map((q, qi) =>
+                                  qi === activeIndex
+                                    ? {
+                                        ...q,
+                                        choices: q.choices.filter((_, ci) => ci !== idx).map((c, ci) => ({ ...c, position: ci + 1 }))
+                                      }
+                                    : q
+                                )
+                              )
+                            }
+                          >
+                            <span className="material-symbols-outlined">delete</span>
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="flex items-center justify-center gap-2 h-12 rounded-xl border-2 border-dashed border-gray-300 dark:border-[#3b4354] text-sm font-bold text-primary hover:border-primary"
+                      onClick={() =>
+                        setQuestions((prev) =>
+                          prev.map((q, qi) =>
+                            qi === activeIndex
+                              ? {
+                                  ...q,
+                                  choices: [
+                                    ...q.choices,
+                                    { text: '', is_correct: false, position: q.choices.length + 1 }
+                                  ]
+                                }
+                              : q
+                          )
+                        )
+                      }
+                    >
+                      <span className="material-symbols-outlined">add</span>
+                      Add answer
+                    </button>
+                  </div>
+                ) : activeQuestion?.type === 'input' ? (
+                  <div className="flex items-center gap-3 bg-white dark:bg-[#1c1f27] border border-gray-200 dark:border-[#282e39] rounded-xl px-4 py-4">
+                    <span className="material-symbols-outlined text-primary">keyboard</span>
+                    <input
+                      className="flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white text-base font-medium placeholder:text-slate-300 dark:placeholder:text-[#3b4354]"
+                      placeholder="Correct answer"
+                      value={activeQuestion.choices[0]?.text || ''}
+                      onChange={(e) => updateChoice(activeIndex, 0, { text: e.target.value, is_correct: true })}
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4 w-full">
+                    {activeQuestion?.choices.map((choice, idx) => {
+                      const colors = ['#e21b3c', '#1368ce', '#d89e00', '#26890c'];
+                      const icons = ['change_history', 'diamond', 'circle', 'square'];
+                      return (
+                        <div
+                          key={idx}
+                          className="group relative flex items-center bg-white dark:bg-[#1c1f27] rounded-xl overflow-hidden border border-transparent focus-within:border-primary shadow-sm transition-all h-20"
+                        >
+                          <div
+                            className="h-full w-14 flex items-center justify-center text-white shrink-0"
+                            style={{ backgroundColor: colors[idx % colors.length] }}
+                          >
+                            <span className="material-symbols-outlined text-[28px] drop-shadow-md">{icons[idx % icons.length]}</span>
+                          </div>
+                          <input
+                            className="flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white px-4 text-lg font-medium placeholder:text-slate-300 dark:placeholder:text-[#3b4354]"
+                            placeholder={`Add answer ${idx + 1}`}
+                            value={choice.text}
+                            onChange={(e) => updateChoice(activeIndex, idx, { text: e.target.value })}
+                          />
+                          <div className="pr-4">
+                            <label className="cursor-pointer size-8 rounded-full border-2 border-gray-200 dark:border-[#3b4354] hover:border-primary flex items-center justify-center transition-all">
+                              <input
+                                className="hidden"
+                                type="radio"
+                                checked={!!choice.is_correct}
+                                onChange={() => setCorrect(activeIndex, idx)}
+                              />
+                              <span className="material-symbols-outlined text-[20px] text-primary">{choice.is_correct ? 'check' : ''}</span>
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
           </div>
         </main>
 

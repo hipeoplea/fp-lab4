@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import ProfileMenu from '../components/ProfileMenu';
 
 export default function DiscoverPage() {
   const location = useLocation();
@@ -24,9 +25,7 @@ export default function DiscoverPage() {
           >
             <span className="truncate">Create Quiz</span>
           </Link>
-          <div className="bg-center bg-no-repeat bg-cover rounded-full size-10 border-2 border-[#282e39] cursor-pointer">
-            <span className="sr-only">Profile</span>
-          </div>
+          <ProfileMenu />
         </div>
       </header>
       <main className="flex-1 flex justify-center py-6 px-4 md:px-8 lg:px-10">
