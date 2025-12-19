@@ -165,5 +165,17 @@ defmodule QuizWeb.GameChannel do
     socket
   end
 
+  defp maybe_push_snapshot(socket, %{phase: "finished"} = resume) do
+    payload = %{
+      phase: :finished,
+      leaderboard: resume[:leaderboard] || resume["leaderboard"] || [],
+      question_index: resume[:question_index] || resume["question_index"],
+      total_questions: resume[:total_questions] || resume["total_questions"]
+    }
+
+    push(socket, "game_finished", payload)
+    socket
+  end
+
   defp maybe_push_snapshot(socket, _), do: socket
 end

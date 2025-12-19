@@ -154,6 +154,7 @@ components:
             type: integer
           question_index:
             type: integer
+            description: Number of questions already completed before this one started
           total_questions:
             type: integer
           prompt:
@@ -225,10 +226,17 @@ components:
       summary: Broadcast when the last question is processed
       payload:
         type: object
-        required: [leaderboard]
+        required: [leaderboard, phase]
         properties:
+          phase:
+            type: string
+            const: finished
           leaderboard:
             $ref: '#/components/schemas/Leaderboard'
+          question_index:
+            type: integer
+          total_questions:
+            type: integer
     ErrorMessage:
       name: error
       title: Error

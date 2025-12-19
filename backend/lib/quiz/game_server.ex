@@ -60,7 +60,7 @@ defmodule Quiz.GameServer do
 
   @impl true
   def handle_call({:join_player, nickname, player_token}, _from, %{phase: :lobby} = state) do
-    now = DateTime.utc_now()
+    now = now_utc()
     token = player_token || UUID.generate()
 
     changeset =
@@ -129,7 +129,7 @@ defmodule Quiz.GameServer do
       ans = %{
         choice_id: choice_id,
         latency_ms: latency,
-        answered_at: DateTime.utc_now()
+        answered_at: now_utc()
       }
 
       new_state =
@@ -195,7 +195,8 @@ defmodule Quiz.GameServer do
   defp start_question(state, now_ms) do
     cancel_timer(state.timer_ref)
 
-    idx = state.question_index + 1
+    completed = state.question_index
+    idx = completed + 1
     question_id = Enum.at(state.question_order, idx - 1)
     question = get_question(state, question_id)
     limit = question.time_limit_ms || 20_000
@@ -204,7 +205,7 @@ defmodule Quiz.GameServer do
 
     payload = %{
       question_id: question_id,
-      question_index: idx,
+      question_index: completed,
       total_questions: length(state.question_order),
       prompt: question.prompt,
       choices: Enum.map(question.choices, &%{id: &1.id, text: &1.text, position: &1.position}),
@@ -216,7 +217,6 @@ defmodule Quiz.GameServer do
     new_state = %{
       state
       | phase: :question,
-        question_index: idx,
         current_question_id: question_id,
         question_started_at_ms: now_ms,
         ends_at_ms: ends_at,
@@ -289,6 +289,8 @@ defmodule Quiz.GameServer do
             %{answered_at: ts} -> ts
           end
 
+        now = now_utc()
+
         row = %{
           session_id: state.session_id,
           player_id: player_id,
@@ -298,8 +300,8 @@ defmodule Quiz.GameServer do
           points_awarded: points_awarded,
           latency_ms: latency_ms,
           answered_at: answered_at,
-          inserted_at: DateTime.utc_now(),
-          updated_at: DateTime.utc_now()
+          created_at: now,
+          updated_at: now
         }
 
         reveal_item = %{
@@ -332,6 +334,7 @@ defmodule Quiz.GameServer do
     %{
       state
       | phase: :leaderboard,
+        question_index: state.question_index + 1,
         current_question_id: nil,
         question_started_at_ms: nil,
         ends_at_ms: nil,
@@ -374,7 +377,7 @@ defmodule Quiz.GameServer do
   end
 
   defp finish_game(state) do
-    now = DateTime.utc_now()
+    now = now_utc()
     leaderboard = leaderboard(state.players)
 
     Repo.update_all(
@@ -389,7 +392,12 @@ defmodule Quiz.GameServer do
       )
     end)
 
-    Endpoint.broadcast("game:#{state.pin}", "game_finished", %{leaderboard: leaderboard})
+    Endpoint.broadcast("game:#{state.pin}", "game_finished", %{
+      phase: :finished,
+      leaderboard: leaderboard,
+      question_index: state.question_index,
+      total_questions: length(state.question_order)
+    })
 
     %{
       state
@@ -404,7 +412,7 @@ defmodule Quiz.GameServer do
   defp cancel_timer(ref), do: Process.cancel_timer(ref, async: true, info: false)
 
   defp maybe_mark_started(%{session: session} = state) do
-    now = DateTime.utc_now()
+    now = now_utc()
 
     case session.started_at do
       nil ->
@@ -483,7 +491,7 @@ defmodule Quiz.GameServer do
 
   defp persist_session_state(state) do
     encoded = encode_state(state)
-    now = DateTime.utc_now()
+    now = now_utc()
     new_version = state.state_version + 1
 
     Repo.update_all(
@@ -550,5 +558,9 @@ defmodule Quiz.GameServer do
       "finished" -> :finished
       _ -> nil
     end
+  end
+
+  defp now_utc do
+    DateTime.utc_now() |> DateTime.truncate(:second)
   end
 end
