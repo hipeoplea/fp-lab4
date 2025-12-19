@@ -54,13 +54,15 @@ export default function GamePlayerPage() {
       setSelectedChoice(null);
       setSubmittedChoiceId(null);
       setInputValue('');
-      const sorted = [...state.data.choices].sort((a, b) => a.position - b.position);
-      setOrderedChoices(sorted);
-      if (state.data.type === 'ordering' && sorted.length) {
-        setSelectedChoice(sorted[0].id);
+      const baseChoices = [...state.data.choices];
+      const nextChoices = state.data.type === 'ordering' ? shuffleArray(baseChoices) : baseChoices.sort((a, b) => a.position - b.position);
+      setOrderedChoices(nextChoices);
+      if (state.data.type !== 'ordering' && nextChoices.length) {
+        setSelectedChoice(nextChoices[0].id);
       }
     } else {
       setRemainingMs(0);
+      setOrderedChoices([]);
     }
   }, [state]);
 
@@ -76,9 +78,32 @@ export default function GamePlayerPage() {
   }, [state]);
 
   const onSubmit = async () => {
-    if (state.phase !== 'question' || selectedChoice === null) return;
-    await commands.submitAnswer(state.data.question_id, selectedChoice);
-    setSubmittedChoiceId(selectedChoice);
+    if (state.phase !== 'question') return;
+
+    const payload: {
+      choice_id?: number | null;
+      answer_text?: string | null;
+      ordering?: number[] | null;
+    } = {};
+
+    if (state.data.type === 'ordering') {
+      if (!orderedChoices.length) return;
+      payload.ordering = orderedChoices.map((choice) => choice.id);
+    } else if (state.data.type === 'input') {
+      const trimmed = inputValue.trim();
+      if (!trimmed) return;
+      payload.answer_text = trimmed;
+      payload.choice_id = state.data.choices[0]?.id ?? null;
+    } else {
+      if (selectedChoice === null) return;
+      payload.choice_id = selectedChoice;
+    }
+
+    await commands.submitAnswer(state.data.question_id, payload);
+
+    if (payload.choice_id) {
+      setSubmittedChoiceId(payload.choice_id);
+    }
   };
 
   const isLobby = state.phase === 'lobby';
@@ -251,11 +276,7 @@ export default function GamePlayerPage() {
                     className="flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white text-base font-medium placeholder:text-slate-300 dark:placeholder:text-[#3b4354]"
                     placeholder="Enter your answer"
                     value={inputValue}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setInputValue(val);
-                      setSelectedChoice(val.trim() ? question.choices[0]?.id ?? null : null);
-                    }}
+                    onChange={(e) => setInputValue(e.target.value)}
                   />
                 </div>
               ) : (
@@ -351,4 +372,13 @@ export default function GamePlayerPage() {
       </div>
     </div>
   );
+}
+
+function shuffleArray<T>(arr: T[]): T[] {
+  const next = [...arr];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
 }

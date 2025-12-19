@@ -62,42 +62,51 @@ defmodule Quiz.GameServer do
   def handle_call({:join_player, nickname_raw, player_token}, _from, %{phase: :lobby} = state) do
     nickname = nickname_raw |> to_string() |> String.trim()
 
-    if nickname == "" do
-      {:reply, {:error, :nickname_required}, state}
-    else
-      now = now_utc()
-      token = player_token || UUID.generate()
+    cond do
+      nickname == "" ->
+        {:reply, {:error, :nickname_required}, state}
 
-      changeset =
-        SessionPlayer.changeset(%SessionPlayer{}, %{
-          nickname: nickname,
-          player_token: token,
-          joined_at: now,
-          session_id: state.session_id
-        })
+      player_token && match?({:ok, _}, fetch_player_by_token(state.players, player_token)) ->
+        {:ok, player} = fetch_player_by_token(state.players, player_token)
+        {:reply, {:ok, player}, state}
 
-      case Repo.insert(changeset) do
-        {:ok, player} ->
-          player_state = %{
-            id: player.id,
-            nickname: player.nickname,
-            score: player.final_score || 0,
-            answered_current?: false,
-            player_token: player.player_token
-          }
+      nickname_taken?(state.players, nickname) ->
+        {:reply, {:error, :nickname_taken}, state}
 
-          updated_state = put_in(state, [:players, player.id], player_state)
+      true ->
+        now = now_utc()
+        token = player_token || UUID.generate()
 
-          new_state =
-            updated_state
-            |> Map.put(:answers_current, reset_answers(updated_state.players))
-            |> persist_session_state()
+        changeset =
+          SessionPlayer.changeset(%SessionPlayer{}, %{
+            nickname: nickname,
+            player_token: token,
+            joined_at: now,
+            session_id: state.session_id
+          })
 
-          {:reply, {:ok, player_state}, new_state}
+        case Repo.insert(changeset) do
+          {:ok, player} ->
+            player_state = %{
+              id: player.id,
+              nickname: player.nickname,
+              score: player.final_score || 0,
+              answered_current?: false,
+              player_token: player.player_token
+            }
 
-        {:error, changeset} ->
-          {:reply, {:error, changeset}, state}
-      end
+            updated_state = put_in(state, [:players, player.id], player_state)
+
+            new_state =
+              updated_state
+              |> Map.put(:answers_current, reset_answers(updated_state.players))
+              |> persist_session_state()
+
+            {:reply, {:ok, player_state}, new_state}
+
+          {:error, changeset} ->
+            {:reply, {:error, changeset}, state}
+        end
     end
   end
 
@@ -585,6 +594,14 @@ defmodule Quiz.GameServer do
     end
   end
 
+  defp nickname_taken?(players, nickname) do
+    normalized = nickname |> String.downcase()
+
+    players
+    |> Map.values()
+    |> Enum.any?(fn player -> String.downcase(player.nickname || "") == normalized end)
+  end
+
   defp snapshot_payload(state) do
     %{
       phase: Atom.to_string(state.phase),
@@ -661,7 +678,7 @@ defmodule Quiz.GameServer do
       "mcq" -> {correct_choice?(question, cid), cid}
       "tf" -> {correct_choice?(question, cid), cid}
       "ordering" -> evaluate_ordering(question, payload.ordering)
-      "input" -> evaluate_input(question, payload.answer_text)
+      "input" -> evaluate_input(question, payload)
       _ -> {correct_choice?(question, cid), cid}
     end
   end
@@ -676,16 +693,25 @@ defmodule Quiz.GameServer do
     {submitted == expected && expected != [], nil}
   end
 
-  defp evaluate_input(question, answer_text) do
-    norm = normalize_free_input(answer_text)
+  defp evaluate_input(question, %{answer_text: answer_text, choice_id: choice_id}) do
+    cond do
+      answer_text && normalize_free_input(answer_text) != nil ->
+        norm = normalize_free_input(answer_text)
 
-    accepted =
-      question.choices
-      |> Enum.map(fn choice -> normalize_free_input(choice.text) end)
-      |> Enum.reject(&is_nil/1)
+        accepted =
+          question.choices
+          |> Enum.map(fn choice -> normalize_free_input(choice.text) end)
+          |> Enum.reject(&is_nil/1)
 
-    result = norm && norm in accepted
-    {!!result, nil}
+        result = norm && norm in accepted
+        {!!result, nil}
+
+      choice_id ->
+        {correct_choice?(question, choice_id), choice_id}
+
+      true ->
+        {false, nil}
+    end
   end
 
   defp normalize_free_input(nil), do: nil

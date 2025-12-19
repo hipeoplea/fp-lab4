@@ -25,10 +25,16 @@ type UseGameChannelOptions = {
   nickname?: string;
 };
 
+type SubmitAnswerPayload = {
+  choice_id?: number | null;
+  answer_text?: string | null;
+  ordering?: number[] | null;
+};
+
 type Commands = {
   hostStart: () => Promise<void>;
   nextQuestion: () => Promise<void>;
-  submitAnswer: (question_id: number, choice_id: number) => Promise<void>;
+  submitAnswer: (question_id: number, payload: SubmitAnswerPayload) => Promise<void>;
 };
 
 export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): {
@@ -232,7 +238,13 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
     () => ({
       hostStart: () => pushCommand('host_start', {}),
       nextQuestion: () => pushCommand('next_question', {}),
-      submitAnswer: (question_id: number, choice_id: number) => pushCommand('submit_answer', { question_id, choice_id })
+      submitAnswer: (question_id: number, payload: SubmitAnswerPayload) =>
+        pushCommand('submit_answer', {
+          question_id,
+          ...(payload.choice_id !== undefined ? { choice_id: payload.choice_id } : {}),
+          ...(payload.answer_text !== undefined ? { answer_text: payload.answer_text } : {}),
+          ...(payload.ordering !== undefined ? { ordering: payload.ordering } : {})
+        })
     }),
     [pushCommand]
   );
