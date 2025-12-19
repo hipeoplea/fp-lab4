@@ -5,6 +5,7 @@ defmodule Quiz.GameServer do
 
   use GenServer
   import Ecto.Query
+  alias Ecto.UUID
 
   require Logger
 
@@ -56,11 +57,12 @@ defmodule Quiz.GameServer do
   @impl true
   def handle_call({:join_player, nickname, player_token}, _from, %{phase: :lobby} = state) do
     now = DateTime.utc_now()
+    token = player_token || UUID.generate()
 
     changeset =
       SessionPlayer.changeset(%SessionPlayer{}, %{
         nickname: nickname,
-        player_token: player_token,
+        player_token: token,
         joined_at: now,
         session_id: state.session_id
       })
@@ -71,7 +73,8 @@ defmodule Quiz.GameServer do
           id: player.id,
           nickname: player.nickname,
           score: player.final_score || 0,
-          answered_current?: false
+          answered_current?: false,
+          player_token: player.player_token
         }
 
         new_state = put_in(state.players[player.id], player_state)
