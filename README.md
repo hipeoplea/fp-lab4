@@ -71,7 +71,7 @@
 
 ## Немного фоточек
 - ![Создание вопросов](docs/question.png)
-- ![Комната ожидания игрока](docs/student.png)
-- ![Страница хоста](docs/hostpage.png)
+- ![Комната ожидания игрока](docs/student.jpg)
+- ![Страница хоста](docs/hostpage.jpg)
 - ![Квиз на стороне игрока](docs/bestteacher.jpg)
 - ![Самая правдивая инфа на земле](docs/iq.jpg)
