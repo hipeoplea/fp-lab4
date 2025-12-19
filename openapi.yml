@@ -586,12 +586,18 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+          description: |
+            Persisted snapshot of the running session. Contains keys such as `phase` (lobby/question/leaderboard/finished),
+            `question_index`, and an array of `players` with their cumulative scores. The backend updates this blob after
+            every question so the session can be resumed if the server restarts.
         state_version:
           type: integer
+          description: Monotonically increasing counter bumped every time the snapshot is persisted.
         last_persisted_at:
           type: string
           format: date-time
           nullable: true
+          description: Timestamp of the last successful snapshot flush.
         created_at:
           type: string
           format: date-time

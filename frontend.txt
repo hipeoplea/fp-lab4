@@ -1,0 +1,21 @@
+Frontend resume instructions
+===========================
+
+1. Persist player tokens.
+   - After a player joins the Phoenix channel, store the returned `player_token` locally (e.g. `localStorage` key `quiz_player_token_<pin>`).
+   - Include that token in future websocket params so the backend can reconnect the same SessionPlayer even if the lobby is closed.
+
+2. Consume resume payloads.
+   - Every join reply now contains `resume` with `{ phase, question_index, total_questions, leaderboard, current_question }`.
+   - Use this snapshot to restore the UI before any subsequent websocket events arrive (host dashboard, player answering screen, or leaderboard view).
+
+3. Host recovery flow.
+   - When `resume.phase` is `question`, render the current prompt immediately and allow the host to continue timers or move to the reveal view once the backend rebroadcasts results.
+   - When `resume.phase` is `leaderboard`, show the scoreboard (`resume.leaderboard`) and prompt the host to trigger the next question.
+
+4. Player recovery flow.
+   - Players should check `resume.current_question`; if present, jump straight into the question UI with that payload instead of waiting for a `question_started` broadcast.
+   - If the snapshot indicates `leaderboard` or `finished`, navigate to the corresponding views but continue listening for newer events.
+
+5. Optional UX polish.
+   - Late joiners can also rely on the same resume payload to preload the current question data rather than showing a blank waiting room.

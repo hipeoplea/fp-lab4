@@ -89,7 +89,7 @@ components:
     JoinAck:
       name: join_ok
       title: Join Acknowledgement
-      summary: Sent immediately after successful join
+      summary: Sent immediately after successful join with resume state so clients can recover mid-game
       payload:
         oneOf:
           - title: Host join response
@@ -101,6 +101,19 @@ components:
               role:
                 type: string
                 const: host
+              players:
+                type: array
+                description: Current lobby roster at the time the host joined/reconnected
+                items:
+                  type: object
+                  required: [player_id, nickname]
+                  properties:
+                    player_id:
+                      type: integer
+                    nickname:
+                      type: string
+              resume:
+                $ref: '#/components/schemas/ResumeState'
           - title: Player join response
             type: object
             required: [pin, role, player_id, nickname]
@@ -114,10 +127,15 @@ components:
                 type: integer
               nickname:
                 type: string
+              player_token:
+                type: string
+                description: Stable identifier to store client-side and reuse on reconnect
+              resume:
+                $ref: '#/components/schemas/ResumeState'
     QuestionStarted:
       name: question_started
       title: Question Started
-      summary: Broadcast when a question begins
+      summary: Broadcast when a question begins or replayed immediately for players reconnecting mid-question
       payload:
         type: object
         required:
@@ -237,3 +255,22 @@ components:
             type: string
           score:
             type: integer
+    ResumeState:
+      type: object
+      description: Snapshot describing the current session state so hosts/players can restore their UI after reconnecting.
+      required: [phase, question_index, total_questions]
+      properties:
+        phase:
+          type: string
+          enum: [lobby, question, leaderboard, finished]
+        question_index:
+          type: integer
+          description: Number of questions already started (1-based index of the next question).
+        total_questions:
+          type: integer
+        leaderboard:
+          $ref: '#/components/schemas/Leaderboard'
+        current_question:
+          description: Present when `phase` is `question`; same shape as a `question_started` broadcast.
+          allOf:
+            - $ref: '#/components/messages/QuestionStarted/payload'
