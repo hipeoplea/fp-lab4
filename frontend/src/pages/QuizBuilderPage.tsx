@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { createQuiz, getQuiz, updateQuiz } from '../api/client';
 import { useSession } from '../state/session';
-import type { Quiz, QuizCreateRequest } from '../types';
+import type { Quiz, QuizCreateRequest, QuizQuestion } from '../types';
 
 type Mode = 'create' | 'edit';
 type QuestionKind = 'multiple_choice' | 'true_false' | 'ordering' | 'input';
@@ -37,6 +37,13 @@ export default function QuizBuilderPage({ mode }: { mode: Mode }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [titleError, setTitleError] = useState<string | null>(null);
 
+  const mapApiTypeToKind = (type: QuizQuestion['type']): QuestionKind => {
+    if (type === 'tf') return 'true_false';
+    if (type === 'ordering') return 'ordering';
+    if (type === 'input') return 'input';
+    return 'multiple_choice';
+  };
+
   useEffect(() => {
     const load = async () => {
       if (mode === 'edit' && id) {
@@ -62,7 +69,7 @@ export default function QuizBuilderPage({ mode }: { mode: Mode }) {
       .map((q) => ({
         id: q.id,
         prompt: q.prompt,
-        type: q.type === 'tf' ? 'true_false' : 'multiple_choice',
+        type: mapApiTypeToKind(q.type),
         time_limit_ms: q.time_limit_ms,
         points: q.points,
         position: q.position,
@@ -74,7 +81,7 @@ export default function QuizBuilderPage({ mode }: { mode: Mode }) {
     setActiveIndex(0);
   };
 
-  const activeQuestion = questions[activeIndex];
+const activeQuestion = questions[activeIndex];
 
   const updateQuestion = (idx: number, next: Partial<EditableQuestion>) => {
     setQuestions((prev) =>

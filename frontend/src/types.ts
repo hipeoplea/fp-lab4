@@ -29,7 +29,7 @@ export interface QuizChoice {
 
 export interface QuizQuestion {
   id: number;
-  type: 'mcq' | 'tf';
+  type: 'mcq' | 'tf' | 'ordering' | 'input';
   prompt: string;
   time_limit_ms: number;
   points: number;
