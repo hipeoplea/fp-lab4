@@ -120,15 +120,10 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
         setConnecting(false);
       })
       .receive('error', (payload: { reason: string }) => {
-        setError(payload?.reason || 'никнейм занят');
+        setError(payload?.reason || 'Failed to join');
         joinedRef.current = false;
         setConnecting(false);
       });
-
-    socket.onError(() => {
-      setError('никнейм занят');
-      setConnecting(false);
-    });
 
     channel.on('player_joined', (payload: { player_id?: number; nickname: string }) => {
       // eslint-disable-next-line no-console
