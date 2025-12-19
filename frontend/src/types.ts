@@ -91,9 +91,18 @@ export interface JoinOkPlayer {
   role: 'player';
   player_id: number;
   nickname: string;
+  player_token?: string;
 }
 
 export type JoinOk = JoinOkHost | JoinOkPlayer;
+
+export interface ResumePayload {
+  phase: 'lobby' | 'question' | 'leaderboard' | 'finished';
+  question_index: number;
+  total_questions: number;
+  leaderboard?: LeaderboardEntry[];
+  current_question?: QuestionStartedPayload;
+}
 
 export interface QuestionStartedPayload {
   phase: 'question';

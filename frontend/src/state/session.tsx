@@ -32,13 +32,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSessionState] = useState<SessionState>({
     token: saved?.token ?? null,
     user: saved?.user ?? null,
-    apiBase: defaultApiBase
+    apiBase: saved?.apiBase ?? defaultApiBase
   });
 
   const persist = useCallback((next: SessionState) => {
     setSessionState(next);
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ token: next.token, user: next.user }));
+      localStorage.setItem(storageKey, JSON.stringify({ token: next.token, user: next.user, apiBase: next.apiBase }));
     } catch {
       /* ignore persistence issues */
     }

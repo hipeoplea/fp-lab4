@@ -16,6 +16,35 @@ export default function GamePlayerPage() {
     return null;
   }, [state]);
 
+  const isFinished = state.phase === 'finished';
+
+  const leaderboard =
+    state.phase === 'reveal'
+      ? state.reveal.leaderboard
+      : state.phase === 'finished'
+        ? state.leaderboard
+        : state.phase === 'leaderboard'
+          ? state.resume.leaderboard || []
+          : [];
+
+  const questionIndex =
+    state.phase === 'question'
+      ? state.data.question_index
+      : state.phase === 'reveal'
+        ? state.question.question_index
+        : state.phase === 'leaderboard'
+          ? state.resume.question_index
+          : undefined;
+
+  const totalQuestions =
+    state.phase === 'question'
+      ? state.data.total_questions
+      : state.phase === 'reveal'
+        ? state.question.total_questions
+        : state.phase === 'leaderboard'
+          ? state.resume.total_questions
+          : undefined;
+
   useEffect(() => {
     if (state.phase === 'question') {
       setSelectedChoice(null);
@@ -41,6 +70,7 @@ export default function GamePlayerPage() {
   };
 
   const isLobby = state.phase === 'lobby';
+  const isLeaderboard = state.phase === 'leaderboard';
 
   return (
     <div className="bg-background-light dark:bg-background-dark min-h-screen flex flex-col font-display text-slate-900 dark:text-white transition-colors">
@@ -59,26 +89,33 @@ export default function GamePlayerPage() {
             <span className="material-symbols-outlined md:mr-2 text-lg">logout</span>
             <span className="hidden md:inline truncate">Quit</span>
           </button>
+          <button
+            className="flex cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-5 bg-gray-100 dark:bg-[#1c1f27] text-slate-900 dark:text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 dark:hover:bg-[#282e39] transition-colors border border-transparent"
+            onClick={() => (window.location.href = '/library')}
+          >
+            <span className="material-symbols-outlined md:mr-2 text-lg">home</span>
+            <span className="hidden md:inline truncate">Home</span>
+          </button>
         </div>
       </header>
       <main className="flex-1 flex flex-col items-center justify-center w-full px-4 py-6 md:px-8 relative z-10">
         <div className="w-full max-w-4xl flex flex-col gap-6">
           {/* Progress & Timer */}
           <div className="flex flex-col md:flex-row gap-6 md:gap-4 items-center justify-between w-full">
-            <div className="flex flex-col gap-2 w-full md:max-w-xs order-2 md:order-1">
-              <div className="flex justify-between items-end px-1">
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">Progress</span>
-                {question ? (
-                  <span className="text-base font-bold text-primary">
-                    Question {question.question_index} <span className="text-gray-400 font-normal">/ {question.total_questions}</span>
+              <div className="flex flex-col gap-2 w-full md:max-w-xs order-2 md:order-1">
+                <div className="flex justify-between items-end px-1">
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">Progress</span>
+                  {questionIndex !== undefined && totalQuestions ? (
+                    <span className="text-base font-bold text-primary">
+                    Question {questionIndex} <span className="text-gray-400 font-normal">/ {totalQuestions}</span>
                   </span>
-                ) : null}
-              </div>
-              <div className="rounded-full bg-gray-200 dark:bg-[#282e39] h-3 w-full overflow-hidden shadow-inner">
-                <div
-                  className="h-full rounded-full bg-primary shadow-[0_0_10px_rgba(43,108,238,0.4)]"
-                  style={{
-                    width: question ? `${Math.round((question.question_index / question.total_questions) * 100)}%` : '0%'
+                  ) : null}
+                </div>
+                <div className="rounded-full bg-gray-200 dark:bg-[#282e39] h-3 w-full overflow-hidden shadow-inner">
+                  <div
+                    className="h-full rounded-full bg-primary shadow-[0_0_10px_rgba(43,108,238,0.4)]"
+                    style={{
+                    width: questionIndex && totalQuestions ? `${Math.round((questionIndex / totalQuestions) * 100)}%` : '0%'
                   }}
                 ></div>
               </div>
@@ -120,18 +157,24 @@ export default function GamePlayerPage() {
               <div className="absolute bottom-0 left-0 w-full p-6 md:p-10 flex flex-col justify-end h-full">
                 <div className="inline-flex mb-3">
                   <span className="bg-primary/90 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-lg">
-                    {isLobby ? 'Waiting' : 'Question'}
+                    {isLobby ? 'Waiting' : isLeaderboard ? 'Leaderboard' : isFinished ? 'Finished' : 'Question'}
                   </span>
                 </div>
                 <h1 className="text-2xl md:text-4xl font-extrabold text-white leading-tight drop-shadow-lg max-w-3xl">
-                  {isLobby ? 'Waiting for host to start...' : question?.prompt || 'Waiting for question...'}
+                  {isLobby
+                    ? 'Waiting for host to start...'
+                    : isLeaderboard
+                      ? 'Waiting for next question...'
+                      : isFinished
+                        ? 'Game finished'
+                        : question?.prompt || 'Waiting for question...'}
                 </h1>
               </div>
             </div>
           </div>
 
           {/* Answers */}
-          {!isLobby ? (
+          {!isLobby && !isLeaderboard && !isFinished ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pb-8">
               {question?.choices.map((choice) => (
                 <button
@@ -155,9 +198,35 @@ export default function GamePlayerPage() {
             </div>
           ) : null}
 
-          {state.phase === 'reveal' ? (
+          {state.phase === 'reveal' || isLeaderboard || state.phase === 'finished' ? (
             <div className="rounded-xl border border-[#e5e7eb] dark:border-[#282e39] bg-white dark:bg-[#1e2430] p-4 shadow-sm">
-              <p className="text-sm text-[#637588] dark:text-[#9da6b9]">Question ended. Waiting for next...</p>
+              <p className="text-sm text-[#637588] dark:text-[#9da6b9] mb-3">
+                {state.phase === 'finished'
+                  ? 'Game finished.'
+                  : isLeaderboard
+                    ? 'Waiting for next question...'
+                    : 'Question ended. Waiting for next...'}
+              </p>
+              {leaderboard.length ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-[#9da6b9]">
+                        <th className="py-2 px-2 text-left">Player</th>
+                        <th className="py-2 px-2 text-left">Score</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#e5e7eb] dark:divide-[#282e39]">
+                      {leaderboard.map((row, idx) => (
+                        <tr key={idx} className="text-[#111318] dark:text-white">
+                          <td className="py-2 px-2">{row.nickname}</td>
+                          <td className="py-2 px-2">{row.score}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -180,7 +249,7 @@ export default function GamePlayerPage() {
           disabled={state.phase !== 'question' || selectedChoice === null}
         >
           <span className="truncate">
-            {isLobby ? 'Waiting...' : state.phase === 'question' ? 'Submit Answer' : 'Waiting...'}
+            {isFinished ? 'Game finished' : isLobby ? 'Waiting...' : state.phase === 'question' ? 'Submit Answer' : 'Waiting...'}
           </span>
         </button>
       </div>

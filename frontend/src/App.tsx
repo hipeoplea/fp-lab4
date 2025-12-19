@@ -10,11 +10,14 @@ import DiscoverPage from './pages/DiscoverPage';
 import GameJoinPage from './pages/GameJoinPage';
 import GamePlayerPage from './pages/GamePlayerPage';
 import GameHostPage from './pages/GameHostPage';
+import { useSession } from './state/session';
 
 export default function App() {
+  const { session } = useSession();
+
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<Navigate to={session.token ? '/library' : '/login'} replace />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route

@@ -4,14 +4,17 @@ import { useSession } from '../state/session';
 import type {
   GameClientRole,
   JoinOk,
+  JoinOkPlayer,
   LeaderboardEntry,
   QuestionRevealPayload,
-  QuestionStartedPayload
+  QuestionStartedPayload,
+  ResumePayload
 } from '../types';
 
 type GameState =
   | { phase: 'idle'; join?: JoinOk }
   | { phase: 'lobby'; join: JoinOk }
+  | { phase: 'leaderboard'; join: JoinOk; resume: ResumePayload }
   | { phase: 'question'; join: JoinOk; data: QuestionStartedPayload }
   | { phase: 'reveal'; join: JoinOk; question: QuestionStartedPayload; reveal: QuestionRevealPayload }
   | { phase: 'finished'; join: JoinOk; leaderboard: LeaderboardEntry[] };
@@ -44,6 +47,26 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
   const [players, setPlayers] = useState<Array<{ player_id?: number; nickname: string }>>([]);
   const joinedRef = useRef(false);
 
+  const playerTokenKey = useMemo(() => `quiz_player_token_${pin}`, [pin]);
+
+  const savePlayerToken = (payload: JoinOkPlayer | null) => {
+    if (payload?.player_token) {
+      try {
+        localStorage.setItem(playerTokenKey, payload.player_token);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  const readPlayerToken = () => {
+    try {
+      return localStorage.getItem(playerTokenKey);
+    } catch {
+      return null;
+    }
+  };
+
   const wsUrl = useMemo(() => {
     const apiBase = session.apiBase || 'http://localhost:4000/api';
     const base = apiBase.replace(/\/api$/, '');
@@ -56,7 +79,10 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
     console.log('[WS CONNECT]', wsUrl, { pin, role, nickname });
     joinedRef.current = false;
     const socket = new Socket(wsUrl, {
-      params: role === 'host' ? { token: session.token || undefined } : { nickname, player_token: undefined }
+      params:
+        role === 'host'
+          ? { token: session.token || undefined }
+          : { nickname, player_token: readPlayerToken() || undefined }
     });
     socket.connect();
     socketRef.current = socket;
@@ -66,21 +92,36 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
 
     channel
       .join()
-      .receive('ok', (payload: JoinOk) => {
+      .receive('ok', (payload: JoinOk & { resume?: ResumePayload }) => {
         // eslint-disable-next-line no-console
         console.log('[WS JOIN OK]', payload);
-        setState({ phase: 'lobby', join: payload });
         joinedRef.current = true;
+        if (payload.role === 'player') {
+          savePlayerToken(payload as JoinOkPlayer);
+        }
+
+        if (payload.resume?.phase === 'question' && payload.resume.current_question) {
+          setState({ phase: 'question', join: payload, data: payload.resume.current_question });
+        } else if (payload.resume?.phase === 'leaderboard') {
+          setState({ phase: 'leaderboard', join: payload, resume: payload.resume });
+        } else if (payload.resume?.phase === 'finished' && payload.resume.leaderboard) {
+          setState({ phase: 'finished', join: payload, leaderboard: payload.resume.leaderboard });
+        } else {
+          setState({ phase: 'lobby', join: payload });
+        }
         if (payload.role === 'player') {
           setPlayers((prev) => {
             const exists = prev.some((p) => p.nickname === payload.nickname && p.player_id === payload.player_id);
             return exists ? prev : [...prev, { player_id: payload.player_id, nickname: payload.nickname }];
           });
+        } else if (Array.isArray((payload as any).players)) {
+          setPlayers((payload as any).players);
         }
         setConnecting(false);
       })
       .receive('error', (payload: { reason: string }) => {
         setError(payload?.reason || 'Failed to join');
+        joinedRef.current = false;
         setConnecting(false);
       });
 
@@ -108,6 +149,7 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
     channel.on('question_started', (payload: QuestionStartedPayload) => {
       // eslint-disable-next-line no-console
       console.log('[WS EVENT] question_started', payload);
+      joinedRef.current = true;
       setState((prev) => {
         const join = (prev as any).join || { pin, role };
         return { phase: 'question', join, data: payload };
@@ -117,6 +159,7 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
     channel.on('question_reveal', (payload: QuestionRevealPayload) => {
       // eslint-disable-next-line no-console
       console.log('[WS EVENT] question_reveal', payload);
+      joinedRef.current = true;
       setState((prev) => {
         if (prev.phase === 'question') {
           return { phase: 'reveal', join: prev.join, question: prev.data, reveal: payload };
@@ -131,6 +174,7 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
     channel.on('game_finished', (payload: { leaderboard: LeaderboardEntry[] }) => {
       // eslint-disable-next-line no-console
       console.log('[WS EVENT] game_finished', payload);
+      joinedRef.current = true;
       setState((prev) => ({
         phase: 'finished',
         join: (prev as any).join || { pin, role },
@@ -141,6 +185,7 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
     channel.on('error', (payload: { reason: string }) => {
       // eslint-disable-next-line no-console
       console.error('[WS EVENT] error', payload);
+      joinedRef.current = false;
       setError(payload.reason || 'Error');
     });
 
@@ -156,7 +201,7 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
   const pushCommand = useMemo(
     () => (event: string, payload: Record<string, unknown>) => {
       return new Promise<void>((resolve) => {
-        if (!channelRef.current || !joinedRef.current) {
+        if (!channelRef.current) {
           setError('Not connected to game yet');
           // eslint-disable-next-line no-console
           console.warn('[WS SEND FAILED] not joined', event, payload);

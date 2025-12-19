@@ -14,7 +14,16 @@ export default function GameHostPage() {
     return null;
   }, [state]);
 
-  const leaderboard = state.phase === 'reveal' ? state.reveal.leaderboard : state.phase === 'finished' ? state.leaderboard : [];
+  const leaderboard =
+    state.phase === 'reveal'
+      ? state.reveal.leaderboard
+      : state.phase === 'finished'
+        ? state.leaderboard
+        : state.phase === 'leaderboard'
+          ? state.resume.leaderboard || []
+          : [];
+
+  const isResumeWaiting = state.phase === 'leaderboard';
 
   return (
     <div className="min-h-screen bg-background-dark text-white flex flex-col">
@@ -23,23 +32,44 @@ export default function GameHostPage() {
           <div className="size-9 rounded-xl bg-primary flex items-center justify-center text-white shadow-lg shadow-blue-900/20">Q</div>
           <div>
             <p className="text-sm font-semibold">Host Panel</p>
-            <p className="text-xs text-[#9da6b9]">PIN: {pin}</p>
+            <button
+              type="button"
+              className="flex items-center gap-2 text-xl font-extrabold tracking-[0.08em] text-white hover:text-primary transition-colors"
+              onClick={() => {
+                navigator.clipboard?.writeText(pin).catch(() => {});
+                setToast('PIN copied');
+              }}
+            >
+              PIN: {pin}
+              <span className="material-symbols-outlined text-base">content_copy</span>
+            </button>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
+            className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-full text-sm font-bold"
+            onClick={() => (window.location.href = '/library')}
+          >
+            Home
+          </button>
+          <button
             className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-full text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={connecting || state.phase !== 'lobby'}
+            disabled={connecting || state.phase === 'finished'}
             onClick={async () => {
-              await commands.hostStart();
-              setToast('Start sent');
+              if (state.phase === 'leaderboard') {
+                await commands.nextQuestion();
+                setToast('Continue sent');
+              } else {
+                await commands.hostStart();
+                setToast('Start sent');
+              }
             }}
           >
-            Start
+            {state.phase === 'leaderboard' ? 'Continue' : 'Start'}
           </button>
           <button
             className="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={connecting || (state.phase !== 'question' && state.phase !== 'reveal')}
+            disabled={connecting || state.phase === 'finished' || (state.phase !== 'question' && state.phase !== 'reveal' && state.phase !== 'leaderboard')}
             onClick={async () => {
               await commands.nextQuestion();
               setToast('Next sent');
@@ -84,13 +114,20 @@ export default function GameHostPage() {
           <QuestionCard question={currentQuestion} />
         ) : (
           <div className="rounded-xl border border-[#282e39] p-4 bg-[#111318]">
-            <p className="text-sm text-[#9da6b9]">Waiting for question...</p>
+            <p className="text-sm text-[#9da6b9]">
+              {state.phase === 'leaderboard' ? 'Game resumed. Click Next to continue.' : 'Waiting for question...'}
+            </p>
           </div>
         )}
 
-        {state.phase === 'reveal' ? (
+        {state.phase === 'reveal' || state.phase === 'leaderboard' ? (
           <div className="rounded-xl border border-[#282e39] p-4 bg-[#111318]">
-            <h3 className="text-lg font-bold mb-2">Leaderboard</h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-bold">Leaderboard</h3>
+              {state.phase === 'leaderboard' ? (
+                <span className="text-xs text-[#9da6b9]">Resume point: question {state.resume.question_index}</span>
+              ) : null}
+            </div>
             <LeaderboardTable entries={leaderboard} />
           </div>
         ) : null}
