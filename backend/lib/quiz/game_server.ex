@@ -32,6 +32,7 @@ defmodule Quiz.GameServer do
   @impl true
   def init(session) do
     quiz = Quizzes.get_full_quiz!(session.quiz_id)
+    players = load_players(session.id)
 
     state = %{
       session: session,
@@ -45,11 +46,14 @@ defmodule Quiz.GameServer do
       current_question_id: nil,
       question_started_at_ms: nil,
       ends_at_ms: nil,
-      players: %{},
-      answers_current: %{},
+      players: players,
+      answers_current: reset_answers(players),
       timer_ref: nil,
-      state_version: 0
+      state_version: session.state_version || 0,
+      current_question_payload: nil
     }
+
+    state = apply_persisted_state(state, session)
 
     {:ok, state}
   end
@@ -77,7 +81,13 @@ defmodule Quiz.GameServer do
           player_token: player.player_token
         }
 
-        new_state = put_in(state.players[player.id], player_state)
+        updated_state = put_in(state, [:players, player.id], player_state)
+
+        new_state =
+          updated_state
+          |> Map.put(:answers_current, reset_answers(updated_state.players))
+          |> persist_session_state()
+
         {:reply, {:ok, player_state}, new_state}
 
       {:error, changeset} ->
@@ -85,8 +95,13 @@ defmodule Quiz.GameServer do
     end
   end
 
-  def handle_call({:join_player, _nickname, _token}, _from, state) do
-    {:reply, {:error, :not_in_lobby}, state}
+  def handle_call({:join_player, _nickname, token}, _from, state) do
+    with player_token when is_binary(player_token) <- token,
+         {:ok, player} <- fetch_player_by_token(state.players, player_token) do
+      {:reply, {:ok, player}, state}
+    else
+      _ -> {:reply, {:error, :not_in_lobby}, state}
+    end
   end
 
   def handle_call(:host_start, _from, %{phase: :lobby} = state) do
@@ -126,6 +141,10 @@ defmodule Quiz.GameServer do
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
+  end
+
+  def handle_call(:snapshot, _from, state) do
+    {:reply, snapshot_payload(state), state}
   end
 
   def handle_call(:next_question, _from, state) do
@@ -192,6 +211,8 @@ defmodule Quiz.GameServer do
       ends_at_ms: ends_at
     }
 
+    payload_with_phase = Map.put(payload, :phase, :question)
+
     new_state = %{
       state
       | phase: :question,
@@ -200,7 +221,8 @@ defmodule Quiz.GameServer do
         question_started_at_ms: now_ms,
         ends_at_ms: ends_at,
         timer_ref: timer_ref,
-        answers_current: reset_answers(state.players)
+        answers_current: reset_answers(state.players),
+        current_question_payload: payload_with_phase
     }
 
     {new_state, payload}
@@ -315,8 +337,10 @@ defmodule Quiz.GameServer do
         ends_at_ms: nil,
         answers_current: %{},
         players: updated_players,
-        timer_ref: nil
+        timer_ref: nil,
+        current_question_payload: nil
     }
+    |> persist_session_state()
   end
 
   defp persist_answers([]), do: :ok
@@ -334,7 +358,7 @@ defmodule Quiz.GameServer do
   end
 
   defp broadcast_question_started(state, payload) do
-    host_payload = payload |> Map.put(:phase, :question)
+    host_payload = state.current_question_payload || Map.put(payload, :phase, :question)
     Endpoint.broadcast("game:#{state.pin}", "question_started", host_payload)
   end
 
@@ -373,6 +397,7 @@ defmodule Quiz.GameServer do
         session: %{state.session | ended_at: now, status: "finished"},
         timer_ref: nil
     }
+    |> persist_session_state()
   end
 
   defp cancel_timer(nil), do: :ok
@@ -392,6 +417,138 @@ defmodule Quiz.GameServer do
 
       _ ->
         state
+    end
+  end
+
+  defp load_players(session_id) do
+    SessionPlayer
+    |> where([sp], sp.session_id == ^session_id)
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn player, acc ->
+      Map.put(acc, player.id, %{
+        id: player.id,
+        nickname: player.nickname,
+        score: player.final_score || 0,
+        answered_current?: false,
+        player_token: player.player_token
+      })
+    end)
+  end
+
+  defp apply_persisted_state(state, session) do
+    persisted = decode_persisted_state(session.state)
+
+    players_with_scores =
+      Enum.reduce(persisted.players, state.players, fn %{id: id, score: score}, acc ->
+        case Map.fetch(acc, id) do
+          {:ok, player} -> Map.put(acc, id, Map.put(player, :score, score))
+          :error -> acc
+        end
+      end)
+
+    %{
+      state
+      | phase: persisted.phase || state.phase,
+        question_index: persisted.question_index || state.question_index,
+        players: players_with_scores,
+        answers_current: reset_answers(players_with_scores),
+        state_version: session.state_version || state.state_version,
+        session: %{
+          state.session
+          | state: session.state,
+            state_version: session.state_version,
+            last_persisted_at: session.last_persisted_at
+        }
+    }
+  end
+
+  defp decode_persisted_state(nil), do: %{phase: nil, question_index: 0, players: []}
+
+  defp decode_persisted_state(map) when is_map(map) do
+    players = Map.get(map, "players") || Map.get(map, :players) || []
+
+    %{
+      phase: phase_from_value(Map.get(map, "phase") || Map.get(map, :phase)),
+      question_index: Map.get(map, "question_index") || Map.get(map, :question_index) || 0,
+      players:
+        Enum.map(players, fn entry ->
+          %{
+            id: entry["id"] || entry[:id],
+            nickname: entry["nickname"] || entry[:nickname],
+            score: entry["score"] || entry[:score] || 0
+          }
+        end)
+    }
+  end
+
+  defp persist_session_state(state) do
+    encoded = encode_state(state)
+    now = DateTime.utc_now()
+    new_version = state.state_version + 1
+
+    Repo.update_all(
+      from(gs in GameSession, where: gs.id == ^state.session_id),
+      set: [state: encoded, state_version: new_version, last_persisted_at: now]
+    )
+
+    %{
+      state
+      | state_version: new_version,
+        session: %{
+          state.session
+          | state: encoded,
+            state_version: new_version,
+            last_persisted_at: now
+        }
+    }
+  end
+
+  defp encode_state(state) do
+    %{
+      "phase" => Atom.to_string(state.phase),
+      "question_index" => state.question_index,
+      "players" =>
+        Enum.map(state.players, fn {_id, player} ->
+          %{"id" => player.id, "nickname" => player.nickname, "score" => player.score}
+        end)
+    }
+  end
+
+  defp fetch_player_by_token(players, token) do
+    players
+    |> Enum.find(fn {_id, player} -> player.player_token && player.player_token == token end)
+    |> case do
+      nil -> {:error, :unknown_player}
+      {_id, player} -> {:ok, player}
+    end
+  end
+
+  defp snapshot_payload(state) do
+    %{
+      phase: Atom.to_string(state.phase),
+      question_index: state.question_index,
+      total_questions: length(state.question_order),
+      leaderboard: leaderboard(state.players),
+      current_question: snapshot_question(state)
+    }
+  end
+
+  defp snapshot_question(%{phase: :question, current_question_payload: payload})
+       when is_map(payload),
+       do: payload
+
+  defp snapshot_question(_), do: nil
+
+  defp phase_from_value(nil), do: nil
+  defp phase_from_value(phase) when is_atom(phase), do: phase
+
+  defp phase_from_value(phase) when is_binary(phase) do
+    case phase do
+      "lobby" -> :lobby
+      "question" -> :question
+      "leaderboard" -> :leaderboard
+      "finished" -> :finished
+      _ -> nil
     end
   end
 end

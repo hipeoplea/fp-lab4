@@ -13,8 +13,20 @@ defmodule QuizWeb.GameChannel do
 
     with {:ok, session} <- Games.fetch_session_by_pin(pin),
          {:ok, _} <- Games.ensure_running(session),
+         snapshot <- Games.session_snapshot(session.pin),
          {:ok, role, socket, resp} <- identify_and_register_player(session, params, socket) do
-      {:ok, Map.put(resp, :role, role), assign(socket, :session, session) |> assign(:role, role)}
+      socket =
+        socket
+        |> assign(:session, session)
+        |> assign(:role, role)
+        |> maybe_push_snapshot(snapshot)
+
+      reply_payload =
+        resp
+        |> Map.put(:role, role)
+        |> Map.put(:resume, snapshot)
+
+      {:ok, reply_payload, socket}
     else
       {:error, reason} -> {:error, %{reason: to_string(reason)}}
     end
@@ -146,4 +158,12 @@ defmodule QuizWeb.GameChannel do
       :error -> nil
     end
   end
+
+  defp maybe_push_snapshot(socket, %{phase: "question", current_question: payload})
+       when is_map(payload) do
+    push(socket, "question_started", payload)
+    socket
+  end
+
+  defp maybe_push_snapshot(socket, _), do: socket
 end

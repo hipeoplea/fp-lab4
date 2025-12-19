@@ -12,12 +12,13 @@ defmodule Quiz.Games do
   def create_session(host_id, quiz_id, attrs \\ %{}) do
     settings = Map.get(attrs, "settings") || Map.get(attrs, :settings) || %{}
 
-    with {:ok, session} <- insert_with_pin(%{
-           host_id: host_id,
-           quiz_id: quiz_id,
-           status: "lobby",
-           settings: settings
-         }),
+    with {:ok, session} <-
+           insert_with_pin(%{
+             host_id: host_id,
+             quiz_id: quiz_id,
+             status: "lobby",
+             settings: settings
+           }),
          {:ok, _pid} <- GameServer.ensure_started(session) do
       {:ok, session}
     end
@@ -78,6 +79,10 @@ defmodule Quiz.Games do
 
   def next_question(pin) do
     GenServer.call(via(pin), :next_question)
+  end
+
+  def session_snapshot(pin) do
+    GenServer.call(via(pin), :snapshot)
   end
 
   def via(pin), do: {:via, Registry, {Quiz.GameRegistry, pin}}
