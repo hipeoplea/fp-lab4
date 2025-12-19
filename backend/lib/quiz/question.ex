@@ -2,7 +2,10 @@ defmodule Quiz.Question do
   use Ecto.Schema
   import Ecto.Changeset
 
+  import Ecto.Query
+
   alias Quiz.Choice
+  alias Quiz.SessionAnswer
 
   @derive {Jason.Encoder,
            only: [
@@ -37,6 +40,7 @@ defmodule Quiz.Question do
     |> validate_inclusion(:type, ["mcq", "tf", "ordering", "input"])
     |> cast_assoc(:choices, with: &Choice.changeset/2)
     |> validate_choice_constraints()
+    |> prepare_changes(&cleanup_answers_if_deleted/1)
   end
 
   defp validate_choice_constraints(changeset) do
@@ -54,20 +58,31 @@ defmodule Quiz.Question do
   end
 
   defp validate_mcq(changeset, entries) do
+    count = length(entries)
+    correct = Enum.count(entries, & &1.is_correct)
+
     cond do
-      length(entries) != 4 -> add_error(changeset, :choices, "Multiple choice questions require 4 answers")
-      Enum.count(entries, & &1.is_correct) != 1 ->
+      count < 2 ->
+        add_error(changeset, :choices, "Multiple choice questions require at least 2 answers")
+
+      correct != 1 ->
         add_error(changeset, :choices, "Multiple choice must have exactly one correct answer")
-      true -> changeset
+
+      true ->
+        changeset
     end
   end
 
   defp validate_tf(changeset, entries) do
     cond do
-      length(entries) != 2 -> add_error(changeset, :choices, "True/False questions require exactly 2 answers")
+      length(entries) != 2 ->
+        add_error(changeset, :choices, "True/False questions require exactly 2 answers")
+
       Enum.count(entries, & &1.is_correct) != 1 ->
         add_error(changeset, :choices, "True/False must have exactly one correct answer")
-      true -> changeset
+
+      true ->
+        changeset
     end
   end
 
@@ -77,7 +92,9 @@ defmodule Quiz.Question do
     cond do
       count < 3 or count > 10 ->
         add_error(changeset, :choices, "Ordering questions require between 3 and 10 items")
-      true -> changeset
+
+      true ->
+        changeset
     end
   end
 
@@ -91,4 +108,17 @@ defmodule Quiz.Question do
 
   defp choice_struct(%Ecto.Changeset{} = changeset), do: Ecto.Changeset.apply_changes(changeset)
   defp choice_struct(%Choice{} = choice), do: choice
+
+  defp cleanup_answers_if_deleted(%Ecto.Changeset{action: :delete} = changeset) do
+    question_id = changeset.data.id
+
+    if question_id do
+      from(sa in SessionAnswer, where: sa.question_id == ^question_id)
+      |> changeset.repo.delete_all()
+    end
+
+    changeset
+  end
+
+  defp cleanup_answers_if_deleted(changeset), do: changeset
 end

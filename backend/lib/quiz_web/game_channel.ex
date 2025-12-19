@@ -8,7 +8,8 @@ defmodule QuizWeb.GameChannel do
   alias QuizWeb.Endpoint
 
   @impl true
-  def join("game:" <> pin, params, socket) do
+  def join("game:" <> pin_raw, params, socket) do
+    pin = String.trim(pin_raw)
     params = Map.merge(socket.assigns[:connect_params] || %{}, params)
 
     with {:ok, session} <- Games.fetch_session_by_pin(pin),

@@ -62,47 +62,42 @@ defmodule Quiz.GameServer do
   def handle_call({:join_player, nickname_raw, player_token}, _from, %{phase: :lobby} = state) do
     nickname = nickname_raw |> to_string() |> String.trim()
 
-    cond do
-      nickname == "" ->
-        {:reply, {:error, :nickname_required}, state}
+    if nickname == "" do
+      {:reply, {:error, :nickname_required}, state}
+    else
+      now = now_utc()
+      token = player_token || UUID.generate()
 
-      nickname_taken?(state.players, nickname) ->
-        {:reply, {:error, :nickname_taken}, state}
+      changeset =
+        SessionPlayer.changeset(%SessionPlayer{}, %{
+          nickname: nickname,
+          player_token: token,
+          joined_at: now,
+          session_id: state.session_id
+        })
 
-      true ->
-        now = now_utc()
-        token = player_token || UUID.generate()
+      case Repo.insert(changeset) do
+        {:ok, player} ->
+          player_state = %{
+            id: player.id,
+            nickname: player.nickname,
+            score: player.final_score || 0,
+            answered_current?: false,
+            player_token: player.player_token
+          }
 
-        changeset =
-          SessionPlayer.changeset(%SessionPlayer{}, %{
-            nickname: nickname,
-            player_token: token,
-            joined_at: now,
-            session_id: state.session_id
-          })
+          updated_state = put_in(state, [:players, player.id], player_state)
 
-        case Repo.insert(changeset) do
-          {:ok, player} ->
-            player_state = %{
-              id: player.id,
-              nickname: player.nickname,
-              score: player.final_score || 0,
-              answered_current?: false,
-              player_token: player.player_token
-            }
+          new_state =
+            updated_state
+            |> Map.put(:answers_current, reset_answers(updated_state.players))
+            |> persist_session_state()
 
-            updated_state = put_in(state, [:players, player.id], player_state)
+          {:reply, {:ok, player_state}, new_state}
 
-            new_state =
-              updated_state
-              |> Map.put(:answers_current, reset_answers(updated_state.players))
-              |> persist_session_state()
-
-            {:reply, {:ok, player_state}, new_state}
-
-          {:error, changeset} ->
-            {:reply, {:error, changeset}, state}
-        end
+        {:error, changeset} ->
+          {:reply, {:error, changeset}, state}
+      end
     end
   end
 
@@ -589,18 +584,6 @@ defmodule Quiz.GameServer do
       {_id, player} -> {:ok, player}
     end
   end
-
-  defp nickname_taken?(players, nickname) do
-    normalized = normalize_nickname(nickname)
-
-    players
-    |> Map.values()
-    |> Enum.any?(fn player -> normalize_nickname(player.nickname) == normalized end)
-  end
-
-  defp normalize_nickname(nil), do: nil
-  defp normalize_nickname(name) when is_binary(name), do: String.downcase(String.trim(name))
-  defp normalize_nickname(_), do: nil
 
   defp snapshot_payload(state) do
     %{

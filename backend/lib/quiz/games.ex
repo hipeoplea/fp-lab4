@@ -57,8 +57,10 @@ defmodule Quiz.Games do
   end
 
   def fetch_session_by_pin(pin) do
-    case Repo.get_by(GameSession, pin: pin) do
-      %GameSession{} = session -> {:ok, session}
+    with {:ok, normalized} <- normalize_pin(pin),
+         %GameSession{} = session <- Repo.get_by(GameSession, pin: normalized) do
+      {:ok, session}
+    else
       _ -> {:error, :not_found}
     end
   end
@@ -90,4 +92,20 @@ defmodule Quiz.Games do
   end
 
   def via(pin), do: {:via, Registry, {Quiz.GameRegistry, pin}}
+
+  defp normalize_pin(pin) when is_binary(pin) do
+    trimmed = String.trim(pin)
+
+    if trimmed == "" do
+      :error
+    else
+      {:ok, trimmed}
+    end
+  end
+
+  defp normalize_pin(pin) when is_integer(pin) do
+    normalize_pin(Integer.to_string(pin))
+  end
+
+  defp normalize_pin(_), do: :error
 end
