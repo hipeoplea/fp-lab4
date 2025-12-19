@@ -73,8 +73,8 @@ defmodule Quiz.Games do
     GenServer.call(via(pin), :host_start)
   end
 
-  def submit_answer(pin, player_id, question_id, choice_id) do
-    GenServer.call(via(pin), {:submit_answer, player_id, question_id, choice_id})
+  def submit_answer(pin, player_id, question_id, answer_payload) do
+    GenServer.call(via(pin), {:submit_answer, player_id, question_id, answer_payload})
   end
 
   def next_question(pin) do

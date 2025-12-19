@@ -19,7 +19,8 @@ defmodule QuizWeb.GameChannel do
         socket
         |> assign(:session, session)
         |> assign(:role, role)
-        |> maybe_push_snapshot(snapshot)
+
+      send(self(), {:push_snapshot, snapshot})
 
       reply_payload =
         resp
@@ -49,10 +50,16 @@ defmodule QuizWeb.GameChannel do
 
   def handle_in(
         "submit_answer",
-        %{"question_id" => qid, "choice_id" => cid},
+        %{"question_id" => qid} = payload,
         %{assigns: %{session: session, player_id: player_id}} = socket
       ) do
-    case Games.submit_answer(session.pin, player_id, qid, cid) do
+    answer_payload = %{
+      choice_id: Map.get(payload, "choice_id"),
+      answer_text: Map.get(payload, "answer_text"),
+      ordering: Map.get(payload, "ordering")
+    }
+
+    case Games.submit_answer(session.pin, player_id, qid, answer_payload) do
       {:ok, resp} -> {:reply, {:ok, resp}, socket}
       {:error, reason} -> {:reply, {:error, %{reason: reason}}, socket}
     end
@@ -109,6 +116,11 @@ defmodule QuizWeb.GameChannel do
   @impl true
   def handle_info({:push_existing_players, players}, socket) do
     Enum.each(players, &push(socket, "player_joined", &1))
+    {:noreply, socket}
+  end
+
+  def handle_info({:push_snapshot, snapshot}, socket) do
+    socket = maybe_push_snapshot(socket, snapshot)
     {:noreply, socket}
   end
 

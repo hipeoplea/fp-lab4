@@ -116,7 +116,7 @@ defmodule Quiz.GameServer do
     {:reply, {:error, :already_started}, state}
   end
 
-  def handle_call({:submit_answer, player_id, question_id, choice_id}, _from, state) do
+  def handle_call({:submit_answer, player_id, question_id, answer_payload}, _from, state) do
     now_ms = System.system_time(:millisecond)
 
     with :ok <- ensure_phase(state, :question),
@@ -125,19 +125,27 @@ defmodule Quiz.GameServer do
          {:ok, player} <- fetch_player(state, player_id),
          :ok <- ensure_not_answered(player) do
       latency = now_ms - state.question_started_at_ms
+      question = get_question(state, question_id)
+      answer = normalize_answer_payload(answer_payload)
+      {is_correct, normalized_choice_id} = evaluate_answer(question, answer)
 
       ans = %{
-        choice_id: choice_id,
+        choice_id: normalized_choice_id,
+        answer_text: answer.answer_text,
+        ordering: answer.ordering,
+        is_correct: is_correct,
         latency_ms: latency,
         answered_at: now_utc()
       }
+
+      points_awarded = calculate_points(question, is_correct, latency)
 
       new_state =
         state
         |> put_in([:answers_current, player_id], ans)
         |> put_in([:players, player_id, :answered_current?], true)
 
-      {:reply, {:ok, %{latency_ms: latency}}, new_state}
+      {:reply, {:ok, %{latency_ms: latency, points_awarded: points_awarded}}, new_state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -205,8 +213,9 @@ defmodule Quiz.GameServer do
 
     payload = %{
       question_id: question_id,
-      question_index: completed,
+      question_index: idx,
       total_questions: length(state.question_order),
+      type: question.type,
       prompt: question.prompt,
       choices: Enum.map(question.choices, &%{id: &1.id, text: &1.text, position: &1.position}),
       ends_at_ms: ends_at
@@ -262,21 +271,24 @@ defmodule Quiz.GameServer do
     {updated_players, rows, reveal} =
       Enum.reduce(results, {%{}, [], []}, fn {player_id, player, answer},
                                              {players_acc, rows_acc, reveal_acc} ->
-        {choice_id, latency_ms} =
+        {choice_id, latency_ms, answer_text, ordering, was_correct} =
           case answer do
-            nil -> {nil, nil}
-            %{choice_id: cid, latency_ms: lat} -> {cid, lat}
+            nil ->
+              {nil, nil, nil, nil, false}
+
+            %{
+              choice_id: cid,
+              latency_ms: lat,
+              answer_text: text,
+              ordering: ord,
+              is_correct: correct?
+            } ->
+              {cid, lat, text, ord, correct?}
           end
 
-        is_correct = !!(choice_id && MapSet.member?(correct_ids, choice_id))
+        is_correct = was_correct
 
-        points_awarded =
-          if is_correct and latency_ms do
-            speed_factor = max(question.time_limit_ms - latency_ms, 0) / question.time_limit_ms
-            round(question.points * speed_factor)
-          else
-            0
-          end
+        points_awarded = calculate_points(question, is_correct, latency_ms)
 
         new_player =
           player
@@ -300,6 +312,8 @@ defmodule Quiz.GameServer do
           points_awarded: points_awarded,
           latency_ms: latency_ms,
           answered_at: answered_at,
+          answer_text: answer_text,
+          ordering: ordering,
           created_at: now,
           updated_at: now
         }
@@ -310,7 +324,9 @@ defmodule Quiz.GameServer do
           choice_id: choice_id,
           is_correct: is_correct,
           points_awarded: points_awarded,
-          latency_ms: latency_ms
+          latency_ms: latency_ms,
+          answer_text: answer_text,
+          ordering: ordering
         }
 
         {
@@ -547,6 +563,99 @@ defmodule Quiz.GameServer do
 
   defp snapshot_question(_), do: nil
 
+  defp normalize_answer_payload(%{choice_id: cid, answer_text: text, ordering: ordering}) do
+    %{
+      choice_id: normalize_choice_id(cid),
+      answer_text: normalize_answer_text(text),
+      ordering: normalize_ordering(ordering)
+    }
+  end
+
+  defp normalize_answer_payload(%{"choice_id" => cid} = payload) do
+    normalize_answer_payload(%{
+      choice_id: cid,
+      answer_text: Map.get(payload, "answer_text"),
+      ordering: Map.get(payload, "ordering")
+    })
+  end
+
+  defp normalize_answer_payload(choice_id) do
+    %{
+      choice_id: normalize_choice_id(choice_id),
+      answer_text: nil,
+      ordering: []
+    }
+  end
+
+  defp normalize_choice_id(nil), do: nil
+  defp normalize_choice_id(id) when is_integer(id), do: id
+
+  defp normalize_choice_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {num, ""} -> num
+      _ -> nil
+    end
+  end
+
+  defp normalize_choice_id(_), do: nil
+
+  defp normalize_answer_text(nil), do: nil
+
+  defp normalize_answer_text(text) when is_binary(text) do
+    cleaned = text |> String.trim()
+    if cleaned == "", do: nil, else: cleaned
+  end
+
+  defp normalize_answer_text(_), do: nil
+
+  defp normalize_ordering(nil), do: []
+
+  defp normalize_ordering(list) when is_list(list) do
+    list
+    |> Enum.map(&normalize_choice_id/1)
+    |> Enum.filter(& &1)
+  end
+
+  defp normalize_ordering(_), do: []
+
+  defp evaluate_answer(question, %{choice_id: cid} = payload) do
+    case question.type do
+      "mcq" -> {cid && correct_choice?(question, cid), cid}
+      "tf" -> {cid && correct_choice?(question, cid), cid}
+      "ordering" -> evaluate_ordering(question, payload.ordering)
+      "input" -> evaluate_input(question, payload.answer_text)
+      _ -> {cid && correct_choice?(question, cid), cid}
+    end
+  end
+
+  defp correct_choice?(question, choice_id) do
+    question.choices
+    |> Enum.any?(fn choice -> choice.id == choice_id && choice.is_correct end)
+  end
+
+  defp evaluate_ordering(question, submitted) do
+    expected = question.choices |> Enum.sort_by(& &1.position) |> Enum.map(& &1.id)
+    {submitted == expected && expected != [], nil}
+  end
+
+  defp evaluate_input(question, answer_text) do
+    norm = normalize_free_input(answer_text)
+
+    accepted =
+      question.choices
+      |> Enum.map(fn choice -> normalize_free_input(choice.text) end)
+      |> Enum.reject(&is_nil/1)
+
+    {norm && norm in accepted, nil}
+  end
+
+  defp normalize_free_input(nil), do: nil
+
+  defp normalize_free_input(text) do
+    cleaned = text |> String.trim() |> String.downcase()
+    if cleaned == "", do: nil, else: cleaned
+  end
+
   defp phase_from_value(nil), do: nil
   defp phase_from_value(phase) when is_atom(phase), do: phase
 
@@ -562,5 +671,27 @@ defmodule Quiz.GameServer do
 
   defp now_utc do
     DateTime.utc_now() |> DateTime.truncate(:second)
+  end
+
+  defp calculate_points(_question, false, _latency_ms), do: 0
+
+  defp calculate_points(question, true, latency_ms) do
+    base_points = question.points || 0
+    limit = question.time_limit_ms || 20_000
+
+    cond do
+      base_points <= 0 ->
+        0
+
+      is_nil(latency_ms) ->
+        base_points
+
+      true ->
+        time_left = max(limit - latency_ms, 0)
+        speed_factor = time_left / limit
+        guaranteed = round(base_points * 0.5)
+        bonus = round(base_points * 0.5 * speed_factor)
+        guaranteed + bonus
+    end
   end
 end

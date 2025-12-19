@@ -80,12 +80,21 @@ components:
       summary: Player submits an answer for the current question
       payload:
         type: object
-        required: [question_id, choice_id]
+        required: [question_id]
         properties:
           question_id:
             type: integer
           choice_id:
             type: integer
+            description: Selected choice identifier for mcq/tf
+          answer_text:
+            type: string
+            description: Free-form text for input questions
+          ordering:
+            type: array
+            description: Ordered list of choice ids for ordering questions
+            items:
+              type: integer
     JoinAck:
       name: join_ok
       title: Join Acknowledgement
@@ -150,11 +159,14 @@ components:
           phase:
             type: string
             const: question
+          type:
+            type: string
+            description: Question type (mcq, tf, ordering, input)
           question_id:
             type: integer
           question_index:
             type: integer
-            description: Number of questions already completed before this one started
+            description: Current question number (1-based)
           total_questions:
             type: integer
           prompt:
@@ -218,6 +230,14 @@ components:
                 latency_ms:
                   type: integer
                   nullable: true
+                answer_text:
+                  type: string
+                  nullable: true
+                ordering:
+                  type: array
+                  nullable: true
+                  items:
+                    type: integer
           leaderboard:
             $ref: '#/components/schemas/Leaderboard'
     GameFinished:

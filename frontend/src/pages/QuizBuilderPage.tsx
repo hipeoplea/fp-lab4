@@ -124,8 +124,10 @@ const setCorrect = (qIdx: number, cIdx: number) => {
     );
 };
 
-  const mapTypeToApi = (kind: QuestionKind): 'mcq' | 'tf' => {
+  const mapTypeToApi = (kind: QuestionKind): 'mcq' | 'tf' | 'ordering' | 'input' => {
     if (kind === 'true_false') return 'tf';
+    if (kind === 'ordering') return 'ordering';
+    if (kind === 'input') return 'input';
     return 'mcq';
   };
 

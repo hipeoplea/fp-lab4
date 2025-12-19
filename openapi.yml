@@ -397,7 +397,7 @@ components:
       properties:
         type:
           type: string
-          enum: [mcq, tf]
+          enum: [mcq, tf, ordering, input]
           default: mcq
           description: Question type, validated against enum
         prompt:
@@ -484,7 +484,7 @@ components:
           type: integer
         type:
           type: string
-          enum: [mcq, tf]
+          enum: [mcq, tf, ordering, input]
         prompt:
           type: string
         time_limit_ms:
