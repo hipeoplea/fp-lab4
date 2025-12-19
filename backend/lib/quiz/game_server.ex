@@ -62,51 +62,10 @@ defmodule Quiz.GameServer do
   def handle_call({:join_player, nickname_raw, player_token}, _from, %{phase: :lobby} = state) do
     nickname = nickname_raw |> to_string() |> String.trim()
 
-    cond do
-      nickname == "" ->
-        {:reply, {:error, :nickname_required}, state}
-
-      player_token && match?({:ok, _}, fetch_player_by_token(state.players, player_token)) ->
-        {:ok, player} = fetch_player_by_token(state.players, player_token)
-        {:reply, {:ok, player}, state}
-
-      nickname_taken?(state.players, nickname) ->
-        {:reply, {:error, :nickname_taken}, state}
-
-      true ->
-        now = now_utc()
-        token = player_token || UUID.generate()
-
-        changeset =
-          SessionPlayer.changeset(%SessionPlayer{}, %{
-            nickname: nickname,
-            player_token: token,
-            joined_at: now,
-            session_id: state.session_id
-          })
-
-        case Repo.insert(changeset) do
-          {:ok, player} ->
-            player_state = %{
-              id: player.id,
-              nickname: player.nickname,
-              score: player.final_score || 0,
-              answered_current?: false,
-              player_token: player.player_token
-            }
-
-            updated_state = put_in(state, [:players, player.id], player_state)
-
-            new_state =
-              updated_state
-              |> Map.put(:answers_current, reset_answers(updated_state.players))
-              |> persist_session_state()
-
-            {:reply, {:ok, player_state}, new_state}
-
-          {:error, changeset} ->
-            {:reply, {:error, changeset}, state}
-        end
+    case attempt_join_player(state, nickname, player_token) do
+      {:reuse, player} -> {:reply, {:ok, player}, state}
+      {:ok, player, new_state} -> {:reply, {:ok, player}, new_state}
+      {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
@@ -164,6 +123,12 @@ defmodule Quiz.GameServer do
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
+  end
+
+  def handle_call({:nickname_available?, nickname_raw}, _from, state) do
+    nickname = nickname_raw |> to_string() |> String.trim()
+    available? = nickname != "" and not nickname_taken?(state.players, nickname)
+    {:reply, {:ok, available?}, state}
   end
 
   def handle_call(:snapshot, _from, state) do
@@ -281,6 +246,78 @@ defmodule Quiz.GameServer do
     end)
   end
 
+  defp attempt_join_player(state, nickname, player_token) do
+    with :ok <- ensure_present_nickname(nickname) do
+      case maybe_reuse_player(state.players, player_token) do
+        {:reuse, player} -> {:reuse, player}
+        :not_found -> insert_player(state, nickname, player_token)
+      end
+    end
+  end
+
+  defp ensure_present_nickname(nickname) when is_binary(nickname) and nickname != "", do: :ok
+  defp ensure_present_nickname(_), do: {:error, :nickname_required}
+
+  defp maybe_reuse_player(_players, nil), do: :not_found
+
+  defp maybe_reuse_player(players, token) do
+    case fetch_player_by_token(players, token) do
+      {:ok, player} -> {:reuse, player}
+      _ -> :not_found
+    end
+  end
+
+  defp insert_player(state, nickname, player_token) do
+    case ensure_unique_nickname(state.players, nickname) do
+      :ok -> persist_new_player(state, nickname, player_token)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ensure_unique_nickname(players, nickname) do
+    if nickname_taken?(players, nickname) do
+      {:error, :nickname_taken}
+    else
+      :ok
+    end
+  end
+
+  defp persist_new_player(state, nickname, player_token) do
+    now = now_utc()
+    token = player_token || UUID.generate()
+
+    changeset =
+      SessionPlayer.changeset(%SessionPlayer{}, %{
+        nickname: nickname,
+        player_token: token,
+        joined_at: now,
+        session_id: state.session_id
+      })
+
+    case Repo.insert(changeset) do
+      {:ok, player} ->
+        player_state = %{
+          id: player.id,
+          nickname: player.nickname,
+          score: player.final_score || 0,
+          answered_current?: false,
+          player_token: player.player_token
+        }
+
+        updated_state = put_in(state, [:players, player.id], player_state)
+
+        new_state =
+          updated_state
+          |> Map.put(:answers_current, reset_answers(updated_state.players))
+          |> persist_session_state()
+
+        {:ok, player_state, new_state}
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
+  end
+
   defp maybe_finish_question(%{phase: :question} = state) do
     cancel_timer(state.timer_ref)
     new_state = finalize_question(state)
@@ -307,8 +344,7 @@ defmodule Quiz.GameServer do
       end)
 
     {updated_players, rows, reveal} =
-      Enum.reduce(results, {%{}, [], []}, fn {player_id, player, answer},
-                                             {players_acc, rows_acc, reveal_acc} ->
+      Enum.reduce(results, {%{}, [], []}, fn {player_id, player, answer}, {players_acc, rows_acc, reveal_acc} ->
         {choice_id, latency_ms, answer_text, ordering, was_correct} =
           case answer do
             nil ->
@@ -536,21 +572,30 @@ defmodule Quiz.GameServer do
   defp decode_persisted_state(nil), do: %{phase: nil, question_index: 0, players: []}
 
   defp decode_persisted_state(map) when is_map(map) do
-    players = Map.get(map, "players") || Map.get(map, :players) || []
-
     %{
-      phase: phase_from_value(Map.get(map, "phase") || Map.get(map, :phase)),
-      question_index: Map.get(map, "question_index") || Map.get(map, :question_index) || 0,
-      players:
-        Enum.map(players, fn entry ->
-          %{
-            id: entry["id"] || entry[:id],
-            nickname: entry["nickname"] || entry[:nickname],
-            score: entry["score"] || entry[:score] || 0
-          }
-        end)
+      phase: map |> value_from(:phase) |> phase_from_value(),
+      question_index: value_from(map, :question_index) || 0,
+      players: map |> value_from(:players) |> decode_players()
     }
   end
+
+  defp decode_players(nil), do: []
+  defp decode_players(list) when is_list(list), do: Enum.map(list, &decode_player_entry/1)
+  defp decode_players(_), do: []
+
+  defp decode_player_entry(entry) do
+    %{
+      id: value_from(entry, :id),
+      nickname: value_from(entry, :nickname),
+      score: value_from(entry, :score) || 0
+    }
+  end
+
+  defp value_from(map, key) when is_map(map) do
+    Map.get(map, to_string(key)) || Map.get(map, key)
+  end
+
+  defp value_from(_map, _key), do: nil
 
   defp persist_session_state(state) do
     encoded = encode_state(state)
@@ -592,6 +637,16 @@ defmodule Quiz.GameServer do
       nil -> {:error, :unknown_player}
       {_id, player} -> {:ok, player}
     end
+  end
+
+  defp nickname_taken?(players, nickname) do
+    normalized = String.downcase(nickname)
+
+    players
+    |> Map.values()
+    |> Enum.any?(fn player ->
+      player.nickname && String.downcase(String.trim(player.nickname)) == normalized
+    end)
   end
 
   defp nickname_taken?(players, nickname) do

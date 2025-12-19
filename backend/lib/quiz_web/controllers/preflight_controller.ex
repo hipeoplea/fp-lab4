@@ -1,4 +1,8 @@
 defmodule QuizWeb.PreflightController do
+  @moduledoc """
+  Minimal controller that responds to CORS preflight checks.
+  """
+
   use QuizWeb, :controller
 
   def options(conn, _params) do

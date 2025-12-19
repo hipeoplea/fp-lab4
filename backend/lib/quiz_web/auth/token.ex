@@ -10,7 +10,7 @@ defmodule QuizWeb.Auth.Token do
       "iss" => @issuer,
       "sub" => to_string(user.id),
       "iat" => now,
-      "exp" => now + 60 * 60 * 24 * 7 
+      "exp" => now + 60 * 60 * 24 * 7
     }
 
     case Joken.generate_and_sign(%{}, claims, signer()) do
@@ -24,7 +24,8 @@ defmodule QuizWeb.Auth.Token do
       {:ok, claims} ->
         if Map.get(claims, "iss") == @issuer, do: {:ok, claims}, else: {:error, :invalid_token}
 
-      _ -> {:error, :invalid_token}
+      _ ->
+        {:error, :invalid_token}
     end
   end
 

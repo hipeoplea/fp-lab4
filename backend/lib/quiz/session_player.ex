@@ -1,14 +1,18 @@
 defmodule Quiz.SessionPlayer do
+  @moduledoc """
+  Ecto schema representing a player that joined a session.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 
   schema "session_players" do
-    field :nickname, :string
-    field :player_token, Ecto.UUID
-    field :joined_at, :utc_datetime
-    field :final_score, :integer, default: 0
+    field(:nickname, :string)
+    field(:player_token, Ecto.UUID)
+    field(:joined_at, :utc_datetime)
+    field(:final_score, :integer, default: 0)
 
-    belongs_to :session, Quiz.GameSession
+    belongs_to(:session, Quiz.GameSession)
 
     timestamps(inserted_at: :created_at, updated_at: :updated_at, type: :utc_datetime)
   end

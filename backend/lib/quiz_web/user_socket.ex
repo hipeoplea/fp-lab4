@@ -1,8 +1,12 @@
 defmodule QuizWeb.UserSocket do
+  @moduledoc """
+  Authenticates websocket clients and routes them to channels.
+  """
+
   use Phoenix.Socket
 
   alias Quiz.Repo
-  channel "game:*", QuizWeb.GameChannel
+  channel("game:*", QuizWeb.GameChannel)
 
   @impl true
   def connect(%{"token" => token} = params, socket, _connect_info) when is_binary(token) do

@@ -1,4 +1,8 @@
 defmodule Quiz.Accounts do
+  @moduledoc """
+  Context boundary for registering accounts and authenticating users.
+  """
+
   alias Quiz.Repo
   alias Quiz.Accounts.User
 

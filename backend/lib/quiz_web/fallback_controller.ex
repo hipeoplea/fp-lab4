@@ -1,4 +1,8 @@
 defmodule QuizWeb.FallbackController do
+  @moduledoc """
+  Transforms context errors into consistent HTTP responses.
+  """
+
   use QuizWeb, :controller
 
   def call(conn, {:error, :not_found}) do

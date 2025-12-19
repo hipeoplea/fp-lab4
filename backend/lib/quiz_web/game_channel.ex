@@ -1,4 +1,8 @@
 defmodule QuizWeb.GameChannel do
+  @moduledoc """
+  Phoenix channel that coordinates live quiz gameplay.
+  """
+
   use Phoenix.Channel
 
   import Ecto.Query
@@ -70,50 +74,49 @@ defmodule QuizWeb.GameChannel do
     {:reply, {:error, %{reason: :unauthorized}}, socket}
   end
 
+  defp identify_and_register_player(
+         session,
+         _params,
+         %{assigns: %{current_user: %{id: host_id} = user}} = socket
+       )
+       when host_id == session.host_id do
+    players = existing_players(session.id)
+    send(self(), {:push_existing_players, players})
+    {:ok, :host, assign(socket, :host, user), %{pin: session.pin, players: players}}
+  end
+
   defp identify_and_register_player(session, params, socket) do
-    case socket.assigns[:current_user] do
-      %{id: id} = user when id == session.host_id ->
-        players = existing_players(session.id)
-        send(self(), {:push_existing_players, players})
-        {:ok, :host, assign(socket, :host, user), %{pin: session.pin, players: players}}
+    token = params |> Map.get("player_token") |> normalize_player_token()
 
-      _ ->
-        nickname = Map.get(params, "nickname")
-        token = params |> Map.get("player_token") |> normalize_player_token()
+    with {:ok, nickname} <- require_nickname(params),
+         {:ok, player} <- Games.join_player(session.pin, nickname, token) do
+      notify_player_joined(session.pin, player)
 
-        cond do
-          is_nil(nickname) || nickname == "" ->
-            {:error, :nickname_required}
+      resp = %{
+        player_id: player.id,
+        nickname: player.nickname,
+        pin: session.pin,
+        player_token: player.player_token
+      }
 
-          true ->
-            case Games.join_player(session.pin, nickname, token) do
-              {:ok, player} ->
-                notify_player_joined(session.pin, player)
+      socket =
+        socket
+        |> assign(:player_id, player.id)
+        |> assign(:player_nickname, player.nickname)
 
-                resp = %{
-                  player_id: player.id,
-                  nickname: player.nickname,
-                  pin: session.pin,
-                  player_token: player.player_token
-                }
+      {:ok, :player, socket, resp}
+    else
+      {:error, :nickname_required} ->
+        {:error, :nickname_required}
 
-                socket =
-                  socket
-                  |> assign(:player_id, player.id)
-                  |> assign(:player_nickname, player.nickname)
+      {:error, :nickname_taken} ->
+        {:error, :nickname_taken}
 
-                {:ok, :player, socket, resp}
+      {:error, :not_in_lobby} ->
+        {:error, :not_in_lobby}
 
-              {:error, :nickname_taken} ->
-                {:error, :nickname_taken}
-
-              {:error, :not_in_lobby} ->
-                {:error, :not_in_lobby}
-
-              {:error, _changeset} ->
-                {:error, :player_join_failed}
-            end
-        end
+      {:error, _} ->
+        {:error, :player_join_failed}
     end
   end
 
@@ -176,6 +179,13 @@ defmodule QuizWeb.GameChannel do
     case UUID.cast(value) do
       {:ok, uuid} -> uuid
       :error -> nil
+    end
+  end
+
+  defp require_nickname(params) do
+    case Map.get(params, "nickname") do
+      nickname when is_binary(nickname) and nickname != "" -> {:ok, nickname}
+      _ -> {:error, :nickname_required}
     end
   end
 

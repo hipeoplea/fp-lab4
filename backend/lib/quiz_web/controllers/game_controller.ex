@@ -1,9 +1,13 @@
 defmodule QuizWeb.GameController do
+  @moduledoc """
+  REST endpoint that launches quiz game sessions.
+  """
+
   use QuizWeb, :controller
 
   alias Quiz.Games
 
-  action_fallback QuizWeb.FallbackController
+  action_fallback(QuizWeb.FallbackController)
 
   def create(%{assigns: %{current_user: user}} = conn, params) do
     quiz_id = Map.get(params, "quiz_id") || Map.get(params, "quizId")

@@ -22,11 +22,11 @@ defmodule Backend.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:phoenix, "~> 1.7"},
       {:phoenix_ecto, "~> 4.6"},
       {:ecto_sql, "~> 3.11"},
       {:postgrex, ">= 0.0.0"},
-
       {:argon2_elixir, "~> 4.0"},
       {:joken, "~> 2.6"},
       {:jason, "~> 1.4"},

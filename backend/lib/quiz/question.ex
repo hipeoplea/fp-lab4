@@ -1,4 +1,8 @@
 defmodule Quiz.Question do
+  @moduledoc """
+  Ecto schema for quiz questions and their validation helpers.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -89,12 +93,10 @@ defmodule Quiz.Question do
   defp validate_ordering(changeset, entries) do
     count = length(entries)
 
-    cond do
-      count < 3 or count > 10 ->
-        add_error(changeset, :choices, "Ordering questions require between 3 and 10 items")
-
-      true ->
-        changeset
+    if count < 3 or count > 10 do
+      add_error(changeset, :choices, "Ordering questions require between 3 and 10 items")
+    else
+      changeset
     end
   end
 

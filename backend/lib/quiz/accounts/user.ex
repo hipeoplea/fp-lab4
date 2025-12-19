@@ -1,13 +1,17 @@
 defmodule Quiz.Accounts.User do
+  @moduledoc """
+  Ecto schema storing persisted users and their credentials.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 
   schema "users" do
-    field :email, :string
-    field :name, :string
-    field :hashed_password, :string
+    field(:email, :string)
+    field(:name, :string)
+    field(:hashed_password, :string)
 
-    field :password, :string, virtual: true
+    field(:password, :string, virtual: true)
 
     timestamps(inserted_at: :created_at, updated_at: :updated_at, type: :utc_datetime)
   end

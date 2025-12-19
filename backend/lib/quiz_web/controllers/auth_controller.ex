@@ -1,8 +1,13 @@
 defmodule QuizWeb.AuthController do
+  @moduledoc """
+  REST endpoints for user registration and login.
+  """
+
   use QuizWeb, :controller
 
   alias Quiz.Accounts
   alias QuizWeb.Auth.Token
+
   def register(conn, %{"email" => _} = params) do
     with {:ok, user} <- Accounts.register_user(params),
          {:ok, jwt} <- Token.generate(user) do

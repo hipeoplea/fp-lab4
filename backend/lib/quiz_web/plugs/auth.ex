@@ -23,11 +23,13 @@ defmodule QuizWeb.Plugs.Auth do
   end
 
   defp parse_id(val) when is_integer(val), do: val
+
   defp parse_id(val) when is_binary(val) do
     case Integer.parse(val) do
       {num, ""} -> num
       _ -> nil
     end
   end
+
   defp parse_id(_), do: nil
 end

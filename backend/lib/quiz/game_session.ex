@@ -1,4 +1,8 @@
 defmodule Quiz.GameSession do
+  @moduledoc """
+  Ecto schema for persisted quiz game sessions.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 

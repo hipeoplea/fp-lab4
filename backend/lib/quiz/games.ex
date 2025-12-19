@@ -91,6 +91,18 @@ defmodule Quiz.Games do
     GenServer.call(via(pin), :snapshot)
   end
 
+  def nickname_available?(pin, nickname) do
+    with {:ok, normalized_pin} <- normalize_pin(pin),
+         {:ok, session} <- fetch_session_by_pin(normalized_pin),
+         {:ok, _} <- ensure_running(session),
+         {:ok, available?} <- GenServer.call(via(normalized_pin), {:nickname_available?, nickname}) do
+      {:ok, available?}
+    else
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :not_found}
+    end
+  end
+
   def via(pin), do: {:via, Registry, {Quiz.GameRegistry, pin}}
 
   defp normalize_pin(pin) when is_binary(pin) do

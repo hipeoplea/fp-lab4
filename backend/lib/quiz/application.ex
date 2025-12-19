@@ -1,4 +1,8 @@
 defmodule Quiz.Application do
+  @moduledoc """
+  OTP application callback tree for the quiz backend.
+  """
+
   use Application
 
   @impl true

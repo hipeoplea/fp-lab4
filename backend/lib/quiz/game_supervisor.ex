@@ -1,4 +1,8 @@
 defmodule Quiz.GameSupervisor do
+  @moduledoc """
+  Dynamic supervisor spawning per-session game servers.
+  """
+
   use DynamicSupervisor
 
   def start_link(init_arg \\ []) do

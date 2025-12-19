@@ -1,4 +1,8 @@
 defmodule Quiz.Choice do
+  @moduledoc """
+  Ecto schema describing a selectable answer choice.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 

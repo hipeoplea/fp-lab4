@@ -1,4 +1,8 @@
 defmodule QuizWeb do
+  @moduledoc """
+  Shared macros for controllers and routers in the Quiz web layer.
+  """
+
   def controller do
     quote do
       use Phoenix.Controller,

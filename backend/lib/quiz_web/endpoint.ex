@@ -1,11 +1,16 @@
 defmodule QuizWeb.Endpoint do
+  @moduledoc """
+  Phoenix endpoint wiring sockets and the router.
+  """
+
   use Phoenix.Endpoint, otp_app: :backend
 
-  socket "/socket", QuizWeb.UserSocket,
+  socket("/socket", QuizWeb.UserSocket,
     websocket: [connect_info: [:peer_data]],
     longpoll: false
+  )
 
-  plug Plug.RequestId
-  plug Plug.Logger
-  plug QuizWeb.Router
+  plug(Plug.RequestId)
+  plug(Plug.Logger)
+  plug(QuizWeb.Router)
 end

@@ -1,4 +1,8 @@
 defmodule QuizWeb.QuizController do
+  @moduledoc """
+  CRUD endpoints for quizzes owned by the authenticated user.
+  """
+
   use QuizWeb, :controller
 
   alias Quiz.Quizzes
@@ -131,8 +135,7 @@ defmodule QuizWeb.QuizController do
   end
 
   defp constraint_message(%Ecto.ConstraintError{constraint: "choices_question_id_fkey"}) do
-    {"choice_has_answers",
-     "Нельзя удалить вариант ответа, если по нему сохранены ответы игроков."}
+    {"choice_has_answers", "Нельзя удалить вариант ответа, если по нему сохранены ответы игроков."}
   end
 
   defp constraint_message(_error) do

@@ -1,4 +1,8 @@
 defmodule Quiz.SessionAnswer do
+  @moduledoc """
+  Ecto schema capturing an answer submitted within a session.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 
