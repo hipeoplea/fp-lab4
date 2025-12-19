@@ -383,6 +383,50 @@ const setCorrect = (qIdx: number, cIdx: number) => {
                           value={choice.text}
                           onChange={(e) => updateChoice(activeIndex, idx, { text: e.target.value })}
                         />
+                        <div className="flex flex-col gap-1">
+                          <button
+                            type="button"
+                            className="size-8 rounded-full bg-gray-100 dark:bg-[#282e39] flex items-center justify-center text-[#6b7280] hover:text-primary disabled:opacity-40"
+                            disabled={idx === 0}
+                            onClick={() =>
+                              setQuestions((prev) =>
+                                prev.map((q, qi) => {
+                                  if (qi !== activeIndex) return q;
+                                  const next = [...q.choices];
+                                  [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                                  return {
+                                    ...q,
+                                    choices: next.map((c, ci) => ({ ...c, position: ci + 1 }))
+                                  };
+                                })
+                              )
+                            }
+                            title="Move up"
+                          >
+                            <span className="material-symbols-outlined text-base">expand_less</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="size-8 rounded-full bg-gray-100 dark:bg-[#282e39] flex items-center justify-center text-[#6b7280] hover:text-primary disabled:opacity-40"
+                            disabled={idx === activeQuestion.choices.length - 1}
+                            onClick={() =>
+                              setQuestions((prev) =>
+                                prev.map((q, qi) => {
+                                  if (qi !== activeIndex) return q;
+                                  const next = [...q.choices];
+                                  [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+                                  return {
+                                    ...q,
+                                    choices: next.map((c, ci) => ({ ...c, position: ci + 1 }))
+                                  };
+                                })
+                              )
+                            }
+                            title="Move down"
+                          >
+                            <span className="material-symbols-outlined text-base">expand_more</span>
+                          </button>
+                        </div>
                         {activeQuestion.choices.length > 2 ? (
                           <button
                             type="button"
@@ -393,7 +437,9 @@ const setCorrect = (qIdx: number, cIdx: number) => {
                                   qi === activeIndex
                                     ? {
                                         ...q,
-                                        choices: q.choices.filter((_, ci) => ci !== idx).map((c, ci) => ({ ...c, position: ci + 1 }))
+                                        choices: q.choices
+                                          .filter((_, ci) => ci !== idx)
+                                          .map((c, ci) => ({ ...c, position: ci + 1 }))
                                       }
                                     : q
                                 )
