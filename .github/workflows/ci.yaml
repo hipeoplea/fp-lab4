@@ -14,6 +14,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Install Hex
+        run: mix local.hex --force
+      - name: Install Rebar
+        run: mix local.rebar --force
+      - name: Install dependencies
+        run: mix deps.get
       - name: Check formatting
         run: mix format --check-formatted
 
