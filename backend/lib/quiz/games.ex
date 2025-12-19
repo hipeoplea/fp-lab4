@@ -81,6 +81,10 @@ defmodule Quiz.Games do
     GenServer.call(via(pin), :next_question)
   end
 
+  def remove_player(pin, player_id) do
+    GenServer.cast(via(pin), {:remove_player, player_id})
+  end
+
   def session_snapshot(pin) do
     GenServer.call(via(pin), :snapshot)
   end

@@ -103,6 +103,9 @@ defmodule QuizWeb.GameChannel do
 
                 {:ok, :player, socket, resp}
 
+              {:error, :nickname_taken} ->
+                {:error, :nickname_taken}
+
               {:error, :not_in_lobby} ->
                 {:error, :not_in_lobby}
 
@@ -133,6 +136,10 @@ defmodule QuizWeb.GameChannel do
 
   @impl true
   def terminate(_reason, %{assigns: %{role: :player, session: session}} = socket) do
+    if player_id = socket.assigns[:player_id] do
+      Games.remove_player(session.pin, player_id)
+    end
+
     payload =
       socket.assigns
       |> Map.take([:player_id, :player_nickname])

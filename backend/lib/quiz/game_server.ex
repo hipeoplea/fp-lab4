@@ -59,39 +59,50 @@ defmodule Quiz.GameServer do
   end
 
   @impl true
-  def handle_call({:join_player, nickname, player_token}, _from, %{phase: :lobby} = state) do
-    now = now_utc()
-    token = player_token || UUID.generate()
+  def handle_call({:join_player, nickname_raw, player_token}, _from, %{phase: :lobby} = state) do
+    nickname = nickname_raw |> to_string() |> String.trim()
 
-    changeset =
-      SessionPlayer.changeset(%SessionPlayer{}, %{
-        nickname: nickname,
-        player_token: token,
-        joined_at: now,
-        session_id: state.session_id
-      })
+    cond do
+      nickname == "" ->
+        {:reply, {:error, :nickname_required}, state}
 
-    case Repo.insert(changeset) do
-      {:ok, player} ->
-        player_state = %{
-          id: player.id,
-          nickname: player.nickname,
-          score: player.final_score || 0,
-          answered_current?: false,
-          player_token: player.player_token
-        }
+      nickname_taken?(state.players, nickname) ->
+        {:reply, {:error, :nickname_taken}, state}
 
-        updated_state = put_in(state, [:players, player.id], player_state)
+      true ->
+        now = now_utc()
+        token = player_token || UUID.generate()
 
-        new_state =
-          updated_state
-          |> Map.put(:answers_current, reset_answers(updated_state.players))
-          |> persist_session_state()
+        changeset =
+          SessionPlayer.changeset(%SessionPlayer{}, %{
+            nickname: nickname,
+            player_token: token,
+            joined_at: now,
+            session_id: state.session_id
+          })
 
-        {:reply, {:ok, player_state}, new_state}
+        case Repo.insert(changeset) do
+          {:ok, player} ->
+            player_state = %{
+              id: player.id,
+              nickname: player.nickname,
+              score: player.final_score || 0,
+              answered_current?: false,
+              player_token: player.player_token
+            }
 
-      {:error, changeset} ->
-        {:reply, {:error, changeset}, state}
+            updated_state = put_in(state, [:players, player.id], player_state)
+
+            new_state =
+              updated_state
+              |> Map.put(:answers_current, reset_answers(updated_state.players))
+              |> persist_session_state()
+
+            {:reply, {:ok, player_state}, new_state}
+
+          {:error, changeset} ->
+            {:reply, {:error, changeset}, state}
+        end
     end
   end
 
@@ -174,6 +185,27 @@ defmodule Quiz.GameServer do
   end
 
   @impl true
+  def handle_cast({:remove_player, player_id}, %{phase: :lobby} = state) do
+    case Map.pop(state.players, player_id) do
+      {nil, _} ->
+        {:noreply, state}
+
+      {_player, players} ->
+        Repo.delete_all(from(sp in SessionPlayer, where: sp.id == ^player_id))
+
+        new_state =
+          state
+          |> Map.put(:players, players)
+          |> Map.update!(:answers_current, &Map.delete(&1, player_id))
+          |> persist_session_state()
+
+        {:noreply, new_state}
+    end
+  end
+
+  def handle_cast({:remove_player, _player_id}, state), do: {:noreply, state}
+
+  @impl true
   def handle_info(:question_timeout, state) do
     {state, _result} = maybe_finish_question(state)
     {:noreply, state}
@@ -211,13 +243,15 @@ defmodule Quiz.GameServer do
     ends_at = now_ms + limit
     timer_ref = Process.send_after(self(), :question_timeout, limit)
 
+    display_choices = display_choices_for(question)
+
     payload = %{
       question_id: question_id,
       question_index: idx,
       total_questions: length(state.question_order),
       type: question.type,
       prompt: question.prompt,
-      choices: Enum.map(question.choices, &%{id: &1.id, text: &1.text, position: &1.position}),
+      choices: display_choices,
       ends_at_ms: ends_at
     }
 
@@ -374,6 +408,15 @@ defmodule Quiz.GameServer do
 
   defp get_question(state, id) do
     Enum.find(state.quiz.questions, fn q -> q.id == id end)
+  end
+
+  defp display_choices_for(question) do
+    base = Enum.map(question.choices, &%{id: &1.id, text: &1.text, position: &1.position})
+
+    case question.type do
+      "ordering" -> Enum.shuffle(base)
+      _ -> base
+    end
   end
 
   defp broadcast_question_started(state, payload) do
@@ -547,6 +590,18 @@ defmodule Quiz.GameServer do
     end
   end
 
+  defp nickname_taken?(players, nickname) do
+    normalized = normalize_nickname(nickname)
+
+    players
+    |> Map.values()
+    |> Enum.any?(fn player -> normalize_nickname(player.nickname) == normalized end)
+  end
+
+  defp normalize_nickname(nil), do: nil
+  defp normalize_nickname(name) when is_binary(name), do: String.downcase(String.trim(name))
+  defp normalize_nickname(_), do: nil
+
   defp snapshot_payload(state) do
     %{
       phase: Atom.to_string(state.phase),
@@ -620,17 +675,17 @@ defmodule Quiz.GameServer do
 
   defp evaluate_answer(question, %{choice_id: cid} = payload) do
     case question.type do
-      "mcq" -> {cid && correct_choice?(question, cid), cid}
-      "tf" -> {cid && correct_choice?(question, cid), cid}
+      "mcq" -> {correct_choice?(question, cid), cid}
+      "tf" -> {correct_choice?(question, cid), cid}
       "ordering" -> evaluate_ordering(question, payload.ordering)
       "input" -> evaluate_input(question, payload.answer_text)
-      _ -> {cid && correct_choice?(question, cid), cid}
+      _ -> {correct_choice?(question, cid), cid}
     end
   end
 
   defp correct_choice?(question, choice_id) do
-    question.choices
-    |> Enum.any?(fn choice -> choice.id == choice_id && choice.is_correct end)
+    !!choice_id and
+      Enum.any?(question.choices, fn choice -> choice.id == choice_id && choice.is_correct end)
   end
 
   defp evaluate_ordering(question, submitted) do
@@ -646,7 +701,8 @@ defmodule Quiz.GameServer do
       |> Enum.map(fn choice -> normalize_free_input(choice.text) end)
       |> Enum.reject(&is_nil/1)
 
-    {norm && norm in accepted, nil}
+    result = norm && norm in accepted
+    {!!result, nil}
   end
 
   defp normalize_free_input(nil), do: nil
