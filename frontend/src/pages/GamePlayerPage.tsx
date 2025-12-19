@@ -9,6 +9,7 @@ export default function GamePlayerPage() {
   const { state, error, commands, connecting } = useGameChannel({ pin, role: 'player', nickname });
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
   const [remainingMs, setRemainingMs] = useState<number>(0);
+  const [submittedChoiceId, setSubmittedChoiceId] = useState<number | null>(null);
 
   const question = useMemo(() => {
     if (state.phase === 'question') return state.data;
@@ -48,6 +49,7 @@ export default function GamePlayerPage() {
   useEffect(() => {
     if (state.phase === 'question') {
       setSelectedChoice(null);
+      setSubmittedChoiceId(null);
     } else {
       setRemainingMs(0);
     }
@@ -67,6 +69,7 @@ export default function GamePlayerPage() {
   const onSubmit = async () => {
     if (state.phase !== 'question' || selectedChoice === null) return;
     await commands.submitAnswer(state.data.question_id, selectedChoice);
+    setSubmittedChoiceId(selectedChoice);
   };
 
   const isLobby = state.phase === 'lobby';
@@ -84,72 +87,68 @@ export default function GamePlayerPage() {
             <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Playing as {nickname}</span>
           </div>
         </div>
-        <div className="flex gap-3">
-          <button className="flex cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-5 bg-red-500/10 text-red-600 dark:text-red-400 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-red-500/20 transition-colors border border-transparent hover:border-red-500/20">
-            <span className="material-symbols-outlined md:mr-2 text-lg">logout</span>
-            <span className="hidden md:inline truncate">Quit</span>
-          </button>
-          <button
-            className="flex cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-5 bg-gray-100 dark:bg-[#1c1f27] text-slate-900 dark:text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 dark:hover:bg-[#282e39] transition-colors border border-transparent"
-            onClick={() => (window.location.href = '/library')}
-          >
-            <span className="material-symbols-outlined md:mr-2 text-lg">home</span>
-            <span className="hidden md:inline truncate">Home</span>
-          </button>
-        </div>
+        <button
+          className="flex cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-5 bg-gray-100 dark:bg-[#1c1f27] text-slate-900 dark:text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 dark:hover:bg-[#282e39] transition-colors border border-transparent"
+          onClick={() => (window.location.href = '/library')}
+        >
+          <span className="material-symbols-outlined md:mr-2 text-lg">home</span>
+          <span className="hidden md:inline truncate">Home</span>
+        </button>
       </header>
-      <main className="flex-1 flex flex-col items-center justify-center w-full px-4 py-6 md:px-8 relative z-10">
+      <main className="flex-1 flex flex-col items-center justify-center w-full px-4 py-6 pb-28 md:px-8 relative z-10">
         <div className="w-full max-w-4xl flex flex-col gap-6">
           {/* Progress & Timer */}
-          <div className="flex flex-col md:flex-row gap-6 md:gap-4 items-center justify-between w-full">
+          {state.phase !== 'finished' ? (
+            <div className="flex flex-col md:flex-row gap-6 md:gap-4 items-center justify-between w-full">
               <div className="flex flex-col gap-2 w-full md:max-w-xs order-2 md:order-1">
                 <div className="flex justify-between items-end px-1">
                   <span className="text-sm font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">Progress</span>
                   {questionIndex !== undefined && totalQuestions ? (
                     <span className="text-base font-bold text-primary">
-                    Question {questionIndex} <span className="text-gray-400 font-normal">/ {totalQuestions}</span>
-                  </span>
+                      Question {questionIndex} <span className="text-gray-400 font-normal">/ {totalQuestions}</span>
+                    </span>
                   ) : null}
                 </div>
                 <div className="rounded-full bg-gray-200 dark:bg-[#282e39] h-3 w-full overflow-hidden shadow-inner">
                   <div
                     className="h-full rounded-full bg-primary shadow-[0_0_10px_rgba(43,108,238,0.4)]"
                     style={{
-                    width: questionIndex && totalQuestions ? `${Math.round((questionIndex / totalQuestions) * 100)}%` : '0%'
-                  }}
-                ></div>
-              </div>
-            </div>
-            <div className="flex flex-col items-center justify-center order-1 md:order-2">
-              <div className="relative flex items-center justify-center size-20 md:size-24 bg-white dark:bg-[#111318] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
-                <svg className="size-full -rotate-90 p-1" viewBox="0 0 36 36">
-                  <path
-                    className="text-gray-100 dark:text-[#282e39]"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  ></path>
-                  <path
-                    className="text-primary drop-shadow-[0_0_8px_rgba(43,108,238,0.6)] transition-all duration-1000"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeDasharray={`${Math.max(0, Math.min(100, (remainingMs / ((question?.ends_at_ms || 0) - Date.now() + remainingMs)) * 100))}, 100`}
-                    strokeLinecap="round"
-                    strokeWidth="2.5"
-                  ></path>
-                </svg>
-                <div className="absolute flex flex-col items-center top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                  <span className="text-2xl md:text-3xl font-extrabold leading-none tracking-tighter">
-                    {Math.ceil(remainingMs / 1000)}
-                  </span>
-                  <span className="text-[10px] uppercase font-bold text-gray-400 mt-[-2px]">Sec</span>
+                      width: questionIndex && totalQuestions ? `${Math.round((questionIndex / totalQuestions) * 100)}%` : '0%'
+                    }}
+                  ></div>
                 </div>
               </div>
+              <div className="flex flex-col items-center justify-center order-1 md:order-2">
+                <div className="relative flex items-center justify-center size-20 md:size-24 bg-white dark:bg-[#111318] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+                  <svg className="size-full -rotate-90 p-1" viewBox="0 0 36 36">
+                    <path
+                      className="text-gray-100 dark:text-[#282e39]"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    ></path>
+                    <path
+                      className="text-primary drop-shadow-[0_0_8px_rgba(43,108,238,0.6)] transition-all duration-1000"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeDasharray={`${Math.max(0, Math.min(100, (remainingMs / ((question?.ends_at_ms || 0) - Date.now() + remainingMs)) * 100))}, 100`}
+                      strokeLinecap="round"
+                      strokeWidth="2.5"
+                    ></path>
+                  </svg>
+                  <div className="absolute flex flex-col items-center top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                    <span className="text-2xl md:text-3xl font-extrabold leading-none tracking-tighter">
+                      {Math.ceil(remainingMs / 1000)}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-gray-400 mt-[-2px]">Sec</span>
+                  </div>
+                </div>
+              </div>
+              <div className="hidden md:block w-full md:max-w-xs order-3"></div>
             </div>
-            <div className="hidden md:block w-full md:max-w-xs order-3"></div>
-          </div>
+          ) : null}
 
           {/* Question */}
           <div className="flex flex-col items-center gap-6 mt-2 md:mt-4">
@@ -183,7 +182,9 @@ export default function GamePlayerPage() {
                     selectedChoice === choice.id
                       ? 'bg-primary text-white border-primary'
                       : 'bg-white dark:bg-[#1e2430] border-transparent hover:border-primary hover:bg-blue-50 dark:hover:bg-[#252b3b]'
-                  } shadow-sm hover:shadow-[0_0_20px_rgba(43,108,238,0.15)]`}
+                  } shadow-sm hover:shadow-[0_0_20px_rgba(43,108,238,0.15)] ${
+                    submittedChoiceId === choice.id ? 'ring-2 ring-primary' : ''
+                  }`}
                   onClick={() => setSelectedChoice(choice.id)}
                   disabled={state.phase !== 'question'}
                 >
@@ -249,7 +250,15 @@ export default function GamePlayerPage() {
           disabled={state.phase !== 'question' || selectedChoice === null}
         >
           <span className="truncate">
-            {isFinished ? 'Game finished' : isLobby ? 'Waiting...' : state.phase === 'question' ? 'Submit Answer' : 'Waiting...'}
+            {isFinished
+              ? 'Game finished'
+              : isLobby
+                ? 'Waiting...'
+                : state.phase === 'question'
+                  ? submittedChoiceId
+                    ? 'Answer submitted'
+                    : 'Submit Answer'
+                  : 'Waiting...'}
           </span>
         </button>
       </div>

@@ -433,7 +433,7 @@ const setCorrect = (qIdx: number, cIdx: number) => {
                   <div className="grid grid-cols-2 gap-4 w-full">
                     {activeQuestion?.choices.map((choice, idx) => {
                       const colors = ['#e21b3c', '#1368ce', '#d89e00', '#26890c'];
-                      const icons = ['change_history', 'diamond', 'circle', 'square'];
+                      const icons = ['change_history', 'close', 'circle', 'square'];
                       return (
                         <div
                           key={idx}
