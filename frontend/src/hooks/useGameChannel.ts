@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Socket } from 'phoenix';
 import { useSession } from '../state/session';
+import { checkNickname } from '../api/client';
 import type {
   GameClientRole,
   JoinOk,
@@ -80,130 +81,152 @@ export function useGameChannel({ pin, role, nickname }: UseGameChannelOptions): 
   }, [session.apiBase]);
 
   useEffect(() => {
-    // Log socket creation for debugging websocket issues
-    // eslint-disable-next-line no-console
-    console.log('[WS CONNECT]', wsUrl, { pin, role, nickname });
-    joinedRef.current = false;
-    const socket = new Socket(wsUrl, {
-      params:
-        role === 'host'
-          ? { token: session.token || undefined }
-          : { nickname, player_token: readPlayerToken() || undefined }
-    });
-    socket.connect();
-    socketRef.current = socket;
+    let cancelled = false;
 
-    const channel = socket.channel(`game:${pin}`, {});
-    channelRef.current = channel;
+    const connect = async () => {
+      if (role === 'player') {
+        try {
+          const res = await checkNickname(pin, nickname || 'Player', session.apiBase);
+          if (!res.available) {
+            setError('никнейм занят');
+            setConnecting(false);
+            return;
+          }
+        } catch (err) {
+          setError('никнейм занят');
+          setConnecting(false);
+          return;
+        }
+      }
 
-    channel
-      .join()
-      .receive('ok', (payload: JoinOk & { resume?: ResumePayload }) => {
-        // eslint-disable-next-line no-console
-        console.log('[WS JOIN OK]', payload);
-        joinedRef.current = true;
-        if (payload.role === 'player') {
-          savePlayerToken(payload as JoinOkPlayer);
-        }
-
-        if (payload.resume?.phase === 'question' && payload.resume.current_question) {
-          setState({ phase: 'question', join: payload, data: payload.resume.current_question });
-        } else if (payload.resume?.phase === 'leaderboard') {
-          setState({ phase: 'leaderboard', join: payload, resume: payload.resume });
-        } else if (payload.resume?.phase === 'finished' && payload.resume.leaderboard) {
-          setState({ phase: 'finished', join: payload, leaderboard: payload.resume.leaderboard });
-        } else {
-          setState({ phase: 'lobby', join: payload });
-        }
-        if (payload.role === 'player') {
-          setPlayers((prev) => {
-            const exists = prev.some((p) => p.nickname === payload.nickname && p.player_id === payload.player_id);
-            return exists ? prev : [...prev, { player_id: payload.player_id, nickname: payload.nickname }];
-          });
-        } else if (Array.isArray((payload as any).players)) {
-          setPlayers((payload as any).players);
-        }
-        setConnecting(false);
-      })
-      .receive('error', (payload: { reason: string }) => {
-        setError(payload?.reason || 'Failed to join');
-        joinedRef.current = false;
-        setConnecting(false);
+      console.log('[WS CONNECT]', wsUrl, { pin, role, nickname });
+      joinedRef.current = false;
+      const socket = new Socket(wsUrl, {
+        params:
+          role === 'host'
+            ? { token: session.token || undefined }
+            : { nickname, player_token: readPlayerToken() || undefined }
       });
+      socket.connect();
+      socketRef.current = socket;
 
-    channel.on('player_joined', (payload: { player_id?: number; nickname: string }) => {
-      // eslint-disable-next-line no-console
-      console.log('[WS EVENT] player_joined', payload);
-      setPlayers((prev) => {
-        const exists = prev.some((p) => (payload.player_id ? p.player_id === payload.player_id : p.nickname === payload.nickname));
-        return exists ? prev : [...prev, payload];
-      });
-    });
+      const channel = socket.channel(`game:${pin}`, {});
+      channelRef.current = channel;
 
-    channel.on('player_left', (payload: { player_id?: number; nickname?: string }) => {
-      // eslint-disable-next-line no-console
-      console.log('[WS EVENT] player_left', payload);
-      setPlayers((prev) =>
-        prev.filter((p) => {
-          if (payload.player_id) return p.player_id !== payload.player_id;
-          if (payload.nickname) return p.nickname !== payload.nickname;
-          return true;
+      channel
+        .join()
+        .receive('ok', (payload: JoinOk & { resume?: ResumePayload }) => {
+          if (cancelled) return;
+          console.log('[WS JOIN OK]', payload);
+          joinedRef.current = true;
+          if (payload.role === 'player') {
+            savePlayerToken(payload as JoinOkPlayer);
+          }
+
+          if (payload.resume?.phase === 'question' && payload.resume.current_question) {
+            setState({ phase: 'question', join: payload, data: payload.resume.current_question });
+          } else if (payload.resume?.phase === 'leaderboard') {
+            setState({ phase: 'leaderboard', join: payload, resume: payload.resume });
+          } else if (payload.resume?.phase === 'finished' && payload.resume.leaderboard) {
+            setState({ phase: 'finished', join: payload, leaderboard: payload.resume.leaderboard });
+          } else {
+            setState({ phase: 'lobby', join: payload });
+          }
+          if (payload.role === 'player') {
+            setPlayers((prev) => {
+              const exists = prev.some((p) => p.nickname === payload.nickname && p.player_id === payload.player_id);
+              return exists ? prev : [...prev, { player_id: payload.player_id, nickname: payload.nickname }];
+            });
+          } else if (Array.isArray((payload as any).players)) {
+            setPlayers((payload as any).players);
+          }
+          setConnecting(false);
         })
-      );
-    });
+        .receive('error', (payload: { reason: string }) => {
+          if (cancelled) return;
+          setError(payload?.reason || 'никнейм занят');
+          joinedRef.current = false;
+          setConnecting(false);
+        });
 
-    channel.on('question_started', (payload: QuestionStartedPayload) => {
-      // eslint-disable-next-line no-console
-      console.log('[WS EVENT] question_started', payload);
-      joinedRef.current = true;
-      setState((prev) => {
-        const join = (prev as any).join || { pin, role };
-        return { phase: 'question', join, data: payload };
+      socket.onError(() => {
+        if (cancelled) return;
+        setError('никнейм занят');
+        setConnecting(false);
       });
-    });
 
-    channel.on('question_reveal', (payload: QuestionRevealPayload) => {
-      // eslint-disable-next-line no-console
-      console.log('[WS EVENT] question_reveal', payload);
-      joinedRef.current = true;
-      setState((prev) => {
-        if (prev.phase === 'question') {
-          return { phase: 'reveal', join: prev.join, question: prev.data, reveal: payload };
-        }
-        if (prev.phase === 'reveal') {
-          return { phase: 'reveal', join: prev.join, question: prev.question, reveal: payload };
-        }
-        return prev;
+      channel.on('player_joined', (payload: { player_id?: number; nickname: string }) => {
+        console.log('[WS EVENT] player_joined', payload);
+        setPlayers((prev) => {
+          const exists = prev.some((p) => (payload.player_id ? p.player_id === payload.player_id : p.nickname === payload.nickname));
+          return exists ? prev : [...prev, payload];
+        });
       });
-    });
 
-    channel.on('game_finished', (payload: { leaderboard: LeaderboardEntry[] }) => {
-      // eslint-disable-next-line no-console
-      console.log('[WS EVENT] game_finished', payload);
-      joinedRef.current = true;
-      setState((prev) => ({
-        phase: 'finished',
-        join: (prev as any).join || { pin, role },
-        leaderboard: payload.leaderboard
-      }));
-    });
+      channel.on('player_left', (payload: { player_id?: number; nickname?: string }) => {
+        console.log('[WS EVENT] player_left', payload);
+        setPlayers((prev) =>
+          prev.filter((p) => {
+            if (payload.player_id) return p.player_id !== payload.player_id;
+            if (payload.nickname) return p.nickname !== payload.nickname;
+            return true;
+          })
+        );
+      });
 
-    channel.on('error', (payload: { reason: string }) => {
-      // eslint-disable-next-line no-console
-      console.error('[WS EVENT] error', payload);
-      joinedRef.current = false;
-      setError(payload.reason || 'Error');
-    });
+      channel.on('question_started', (payload: QuestionStartedPayload) => {
+        console.log('[WS EVENT] question_started', payload);
+        joinedRef.current = true;
+        setState((prev) => {
+          const join = (prev as any).join || { pin, role };
+          return { phase: 'question', join, data: payload };
+        });
+      });
 
-    return () => {
-      // eslint-disable-next-line no-console
-      console.log('[WS DISCONNECT]');
-      joinedRef.current = false;
-      channel.leave();
-      socket.disconnect();
+      channel.on('question_reveal', (payload: QuestionRevealPayload) => {
+        console.log('[WS EVENT] question_reveal', payload);
+        joinedRef.current = true;
+        setState((prev) => {
+          if (prev.phase === 'question') {
+            return { phase: 'reveal', join: prev.join, question: prev.data, reveal: payload };
+          }
+          if (prev.phase === 'reveal') {
+            return { phase: 'reveal', join: prev.join, question: prev.question, reveal: payload };
+          }
+          return prev;
+        });
+      });
+
+      channel.on('game_finished', (payload: { leaderboard: LeaderboardEntry[] }) => {
+        console.log('[WS EVENT] game_finished', payload);
+        joinedRef.current = true;
+        setState((prev) => ({
+          phase: 'finished',
+          join: (prev as any).join || { pin, role },
+          leaderboard: payload.leaderboard
+        }));
+      });
+
+      channel.on('error', (payload: { reason: string }) => {
+        console.error('[WS EVENT] error', payload);
+        joinedRef.current = false;
+        setError(payload.reason || 'Error');
+      });
+
+      return () => {
+        console.log('[WS DISCONNECT]');
+        joinedRef.current = false;
+        channel.leave();
+        socket.disconnect();
+      };
     };
-  }, [pin, role, wsUrl, session.token, nickname]);
 
+    const cleanup = connect();
+    return () => {
+      cancelled = true;
+      if (typeof cleanup === 'function') cleanup();
+    };
+  }, [pin, role, wsUrl, session.token, nickname, session.apiBase]);
   const pushCommand = useMemo(
     () => (event: string, payload: Record<string, unknown>) => {
       return new Promise<void>((resolve) => {

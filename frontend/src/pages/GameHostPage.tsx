@@ -95,7 +95,7 @@ export default function GameHostPage() {
                 players.map((p, idx) => (
                   <div key={`${p.player_id || p.nickname}-${idx}`} className="flex items-center gap-3 p-2 rounded-lg bg-[#1c1f27] border border-[#282e39]">
                     <div className="size-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
-                      {p.nickname ? p.nickname.charAt(0).toUpperCase() : '?'}
+                      :)
                     </div>
                     <span className="text-sm font-medium">{p.nickname || 'Unknown'}</span>
                   </div>

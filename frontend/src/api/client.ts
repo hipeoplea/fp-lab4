@@ -79,3 +79,7 @@ export function deleteQuiz(id: string, token: string | null, apiBase?: string) {
 export function createGameSession(quizId: number, token: string | null, apiBase?: string) {
   return request<GameSession>('/games', { method: 'POST', body: { quiz_id: quizId }, token, apiBase });
 }
+
+export function checkNickname(pin: string, nickname: string, apiBase?: string) {
+  return request<{ available: boolean }>('/games/check_nickname', { method: 'POST', body: { pin, nickname }, apiBase });
+}
