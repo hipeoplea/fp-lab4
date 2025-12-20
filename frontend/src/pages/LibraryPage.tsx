@@ -69,7 +69,6 @@ export default function LibraryPage() {
           <div className="flex flex-1 justify-end gap-4 lg:gap-8 items-center">
             <nav className="hidden md:flex items-center gap-6 lg:gap-9">
               <NavItem to="/library" activePath={location.pathname} label="My Library" />
-              <NavItem to="/reports" activePath={location.pathname} label="Reports" />
             </nav>
             <Link
               to="/quizzes/new"
