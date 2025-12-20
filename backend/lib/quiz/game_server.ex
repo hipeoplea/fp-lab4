@@ -268,18 +268,7 @@ defmodule Quiz.GameServer do
   end
 
   defp insert_player(state, nickname, player_token) do
-    case ensure_unique_nickname(state.players, nickname) do
-      :ok -> persist_new_player(state, nickname, player_token)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp ensure_unique_nickname(players, nickname) do
-    if nickname_taken?(players, nickname) do
-      {:error, :nickname_taken}
-    else
-      :ok
-    end
+    persist_new_player(state, nickname, player_token)
   end
 
   defp persist_new_player(state, nickname, player_token) do
@@ -637,16 +626,6 @@ defmodule Quiz.GameServer do
       nil -> {:error, :unknown_player}
       {_id, player} -> {:ok, player}
     end
-  end
-
-  defp nickname_taken?(players, nickname) do
-    normalized = String.downcase(nickname)
-
-    players
-    |> Map.values()
-    |> Enum.any?(fn player ->
-      player.nickname && String.downcase(String.trim(player.nickname)) == normalized
-    end)
   end
 
   defp nickname_taken?(players, nickname) do
