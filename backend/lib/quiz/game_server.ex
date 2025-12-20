@@ -154,7 +154,7 @@ defmodule Quiz.GameServer do
   end
 
   @impl true
-  def handle_cast({:remove_player, player_id}, %{phase: :lobby} = state) do
+  def handle_cast({:remove_player, player_id}, state) do
     case Map.pop(state.players, player_id) do
       {nil, _} ->
         {:noreply, state}
@@ -171,8 +171,6 @@ defmodule Quiz.GameServer do
         {:noreply, new_state}
     end
   end
-
-  def handle_cast({:remove_player, _player_id}, state), do: {:noreply, state}
 
   @impl true
   def handle_info(:question_timeout, state) do
